@@ -198,6 +198,8 @@ def trim_video_for_short(input_path, output_path, max_duration_seconds=60, clip_
                      .set_duration(duration) \
                      .set_position(("center", int(target_height * 0.08))) # 8% de la hauteur du haut
 
+        stroke_width = 0.5
+
         # Ajustements pour le nom du streamer : positionné un peu plus haut que le bord inférieur
         # target_height * 0.92 place le HAUT du texte à 92% de la hauteur.
         # Soustraire 40 (taille approximative de la police) assure que le bas du texte est visible.
