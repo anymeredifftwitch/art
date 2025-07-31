@@ -121,23 +121,11 @@ def trim_video_for_short(
         if "just chatting" in game_name or "juste de causer" in game_name:
             print("⏩ Mode 'Just Chatting' : Zoom sur la vidéo principale.")
             
-            # LOGIQUE CORRIGÉE : Redimensionner en fonction de la hauteur cible pour un zoom correct
-            main_video_clip_display = moviepy_resize(clip, newsize=(None, target_height))
-            # Rogner au centre pour adapter à la largeur cible
-            main_video_clip_display = crop(
-                main_video_clip_display,
-                width=target_width,
-                height=target_height,
-                x_center='center'
-            )
-
-            # --- ANCIENNE LOGIQUE AVEC FACTEUR 1.4 (COMMENTÉE) ---
-            # main_video_clip_display = clip.copy()
-            # main_video_display_width = int(target_width * 1.4) # Facteur de zoom 1.4
-            # main_video_clip_display = moviepy_resize(main_video_clip_display, width=main_video_display_width)
-            # main_video_clip_display = main_video_clip_display.fx(even_size)
-            # ---------------------------------------------------
-            
+            # LOGIQUE RETOURNÉE À LA VERSION ORIGINALE : Utilisation d'un facteur de zoom fixe de 2
+            main_video_clip_display = clip.copy()
+            main_video_display_width = int(target_width * 2) # Facteur de zoom 2
+            main_video_clip_display = moviepy_resize(main_video_clip_display, width=main_video_display_width)
+            main_video_clip_display = main_video_clip_display.fx(even_size)
             all_video_elements.append(main_video_clip_display.set_position(("center", "center")))
         else:
             print("✅ Mode 'Jeu' : Composition avec webcam et gameplay séparés.")
@@ -290,7 +278,7 @@ def trim_video_for_short_test(
     
     processed_file = trim_video_for_short(
         input_path=input_path,
-        output_path=output_path,
+        output_path=output_video_file_game,
         max_duration_seconds=max_duration_seconds,
         clip_data=clip_info_test
     )
