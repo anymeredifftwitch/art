@@ -158,7 +158,6 @@ def main():
             output_path=current_processed_file,
             max_duration_seconds=get_top_clips.MAX_VIDEO_DURATION_SECONDS,
             clip_data=selected_clip,
-            enable_webcam_crop=False
         )
         
         # Vérifications après traitement
