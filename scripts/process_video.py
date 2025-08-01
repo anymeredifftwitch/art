@@ -117,12 +117,12 @@ def trim_video_for_short(
         all_video_elements.append(background_clip.set_position(("center", "center")))
 
         # --- Traitement de la vidéo principale en fonction de la catégorie ---
-        # --- LIGNE CORRIGÉE : Gérer le cas où 'game_name' est None. ---
-        game_name = (clip_data.get("game_name") or "").lower()
-        if "just chatting" in game_name or "juste de causer" in game_name:
+        # --- Ligne corrigée pour gérer le cas où 'game_name' est None. ---
+        game_name = clip_data.get("game_name")
+        if game_name is None or "just chatting" in game_name.lower() or "juste de causer" in game_name.lower():
             print("⏩ Mode 'Just Chatting' : Zoom sur la vidéo principale.")
             
-            # LOGIQUE RETOURNÉE À LA VERSION ORIGINALE : Utilisation d'un facteur de zoom fixe de 2
+            # LOGIQUE POUR LE MODE JUST CHATTING
             main_video_clip_display = clip.copy()
             main_video_display_width = int(target_width * 2) # Facteur de zoom 2
             main_video_clip_display = moviepy_resize(main_video_clip_display, width=main_video_display_width)
@@ -147,7 +147,6 @@ def trim_video_for_short(
             all_video_elements.append(webcam_clip_resized.set_position(("center", "top")))
 
             # 2. Préparer le clip du gameplay (bas)
-            # Logique de zoom corrigée pour la partie gameplay
             gameplay_clip_original_zoomed = moviepy_resize(clip, newsize=(None, gameplay_section_height))
             gameplay_clip_final = crop(
                 gameplay_clip_original_zoomed,
@@ -253,65 +252,65 @@ def trim_video_for_short(
         if 'final_video' in locals() and final_video is not None:
             final_video.close()
 
-def trim_video_for_short_test(
-    input_path: str,
-    output_path: str,
-    is_webcam_clip: bool,
-    max_duration_seconds: int = 60,
-):
-    """
-    Fonction de test pour vérifier la composition vidéo avec ou sans webcam.
-    Args:
-        input_path (str): Chemin vers le fichier vidéo d'entrée.
-        output_path (str): Chemin où sauvegarder le fichier vidéo de sortie.
-        is_webcam_clip (bool): True pour simuler un clip avec webcam (jeu), False pour simuler un clip sans (just chatting).
-        max_duration_seconds (int): Durée maximale du Short en secondes.
-    """
+# def trim_video_for_short_test(
+#     input_path: str,
+#     output_path: str,
+#     is_webcam_clip: bool,
+#     max_duration_seconds: int = 60,
+# ):
+#     """
+#     Fonction de test pour vérifier la composition vidéo avec ou sans webcam.
+#     Args:
+#         input_path (str): Chemin vers le fichier vidéo d'entrée.
+#         output_path (str): Chemin où sauvegarder le fichier vidéo de sortie.
+#         is_webcam_clip (bool): True pour simuler un clip avec webcam (jeu), False pour simuler un clip sans (just chatting).
+#         max_duration_seconds (int): Durée maximale du Short en secondes.
+#     """
     
-    clip_info_test = {
-        'title': 'Test de Composition Vidéo',
-        'broadcaster_name': 'AnymeRediffTwitch',
-        'game_name': 'Gaming' if is_webcam_clip else 'Just Chatting'
-    }
+#     clip_info_test = {
+#         'title': 'Test de Composition Vidéo',
+#         'broadcaster_name': 'AnymeRediffTwitch',
+#         'game_name': 'Gaming' if is_webcam_clip else 'Just Chatting'
+#     }
     
-    print(f"\n--- Démarrage du traitement de TEST pour {input_path} ---")
-    print(f"Mode de test : {'Avec webcam (jeu)' if is_webcam_clip else 'Sans webcam (just chatting)'}")
+#     print(f"\n--- Démarrage du traitement de TEST pour {input_path} ---")
+#     print(f"Mode de test : {'Avec webcam (jeu)' if is_webcam_clip else 'Sans webcam (just chatting)'}")
     
-    # Note: L'appel à trim_video_for_short_test dans le bloc if __name__ == "__main__":
-    # doit utiliser la variable 'output_video_file_game' qui est définie dans le même bloc.
-    # Je vais donc corriger cette partie pour que les deux tests fonctionnent correctement.
-    # La correction est appliquée dans l'appel ci-dessous.
-    processed_file = trim_video_for_short(
-        input_path=input_path,
-        output_path=output_path, # Utilisation de l'output_path passé en argument
-        max_duration_seconds=max_duration_seconds,
-        clip_data=clip_info_test
-    )
+#     # Note: L'appel à trim_video_for_short_test dans le bloc if __name__ == "__main__":
+#     # doit utiliser la variable 'output_video_file_game' qui est définie dans le même bloc.
+#     # Je vais donc corriger cette partie pour que les deux tests fonctionnent correctement.
+#     # La correction est appliquée dans l'appel ci-dessous.
+#     processed_file = trim_video_for_short(
+#         input_path=input_path,
+#         output_path=output_path, # Utilisation de l'output_path passé en argument
+#         max_duration_seconds=max_duration_seconds,
+#         clip_data=clip_info_test
+#     )
     
-    if processed_file:
-        print(f"\n🎉 Test réussi ! Vidéo traitée et sauvegardée : {processed_file}")
-    else:
-        print("\n❌ Le test de traitement vidéo a échoué.")
+#     if processed_file:
+#         print(f"\n🎉 Test réussi ! Vidéo traitée et sauvegardée : {processed_file}")
+#     else:
+#         print("\n❌ Le test de traitement vidéo a échoué.")
 
-# --- Exemple d'utilisation du script en local ---
-if __name__ == "__main__":
-    output_dir = "output_test"
-    os.makedirs(output_dir, exist_ok=True)
+# # --- Exemple d'utilisation du script en local ---
+# if __name__ == "__main__":
+#     output_dir = "output_test"
+#     os.makedirs(output_dir, exist_ok=True)
     
-    input_video_file = "video.mp4" # Assurez-vous que ce fichier existe dans le même dossier que ce script
+#     input_video_file = "video.mp4" # Assurez-vous que ce fichier existe dans le même dossier que ce script
 
-    # --- Test 1 : Clip de jeu (avec webcam) ---
-    output_video_file_game = os.path.join(output_dir, "short_game_test.mp4")
-    trim_video_for_short_test(
-        input_path=input_video_file,
-        output_path=output_video_file_game,
-        is_webcam_clip=True
-    )
+#     # --- Test 1 : Clip de jeu (avec webcam) ---
+#     output_video_file_game = os.path.join(output_dir, "short_game_test.mp4")
+#     trim_video_for_short_test(
+#         input_path=input_video_file,
+#         output_path=output_video_file_game,
+#         is_webcam_clip=True
+#     )
     
-    # --- Test 2 : Clip Just Chatting (sans webcam) ---
-    output_video_file_chat = os.path.join(output_dir, "short_chat_test.mp4")
-    trim_video_for_short_test(
-        input_path=input_video_file,
-        output_path=output_video_file_chat,
-        is_webcam_clip=False
-    )
+#     # --- Test 2 : Clip Just Chatting (sans webcam) ---
+#     output_video_file_chat = os.path.join(output_dir, "short_chat_test.mp4")
+#     trim_video_for_short_test(
+#         input_path=input_video_file,
+#         output_path=output_video_file_chat,
+#         is_webcam_clip=False
+#     )
