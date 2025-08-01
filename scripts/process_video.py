@@ -117,7 +117,8 @@ def trim_video_for_short(
         all_video_elements.append(background_clip.set_position(("center", "center")))
 
         # --- Traitement de la vidéo principale en fonction de la catégorie ---
-        game_name = clip_data.get("game_name", "").lower()
+        # --- LIGNE CORRIGÉE : Gérer le cas où 'game_name' est None. ---
+        game_name = (clip_data.get("game_name") or "").lower()
         if "just chatting" in game_name or "juste de causer" in game_name:
             print("⏩ Mode 'Just Chatting' : Zoom sur la vidéo principale.")
             
@@ -276,9 +277,13 @@ def trim_video_for_short_test(
     print(f"\n--- Démarrage du traitement de TEST pour {input_path} ---")
     print(f"Mode de test : {'Avec webcam (jeu)' if is_webcam_clip else 'Sans webcam (just chatting)'}")
     
+    # Note: L'appel à trim_video_for_short_test dans le bloc if __name__ == "__main__":
+    # doit utiliser la variable 'output_video_file_game' qui est définie dans le même bloc.
+    # Je vais donc corriger cette partie pour que les deux tests fonctionnent correctement.
+    # La correction est appliquée dans l'appel ci-dessous.
     processed_file = trim_video_for_short(
         input_path=input_path,
-        output_path=output_video_file_game,
+        output_path=output_path, # Utilisation de l'output_path passé en argument
         max_duration_seconds=max_duration_seconds,
         clip_data=clip_info_test
     )
