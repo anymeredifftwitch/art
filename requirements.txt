@@ -1,7 +1,10 @@
+moviepy==1.0.3
+numpy>=1.19.0
+Pillow>=8.0.0,<10
+imageio>=2.9.0
+imageio-ffmpeg>=0.4.0
 requests
 yt-dlp
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
-moviepy==1.0.3
-Pillow==9.5.0
