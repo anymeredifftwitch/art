@@ -19,9 +19,6 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 os.makedirs(DATA_DIR, exist_ok=True)
 
 PUBLISHED_HISTORY_FILE = os.path.join(DATA_DIR, 'published_shorts_history.json')
-RAW_CLIP_PATH         = os.path.join(DATA_DIR, 'temp_raw_clip.mp4')
-PROCESSED_CLIP_PATH   = os.path.join(DATA_DIR, 'temp_processed_short.mp4')
-
 NUMBER_OF_CLIPS_TO_ATTEMPT_TO_PUBLISH = 3
 
 def load_published_history():
@@ -78,32 +75,34 @@ def main():
             continue
         clips_attempted.append(clip['id'])
 
-        downloaded_file = download_clip.download_twitch_clip(clip['url'], RAW_CLIP_PATH)
+        # Chemins uniques pour ce clip
+        clip_id = clip['id']
+        raw_clip_path = os.path.join(DATA_DIR, f"{clip_id}_raw.mp4")
+        processed_clip_path = os.path.join(DATA_DIR, f"{clip_id}_processed.mp4")
+
+        # Téléchargement du clip
+        downloaded_file = download_clip.download_twitch_clip(clip['url'], raw_clip_path)
         if not downloaded_file:
             continue
 
-        # Debug : quel game_name on analyse ?
-        raw_game = clip.get('game_name')
-        print(f"ℹ️  game_name brut du clip : {raw_game!r}")
-
-        # Classification
+        print(f"ℹ️  game_name brut du clip : {clip.get('game_name')!r}")
         clip_type = classify_clip_type(clip)
         print(f"📂 Type de clip détecté : {clip_type}")
 
-        # Choix du traitement
+        # Traitement
         if clip_type == "chatting":
             print("🛠️  Application du traitement JUST CHATTING")
-            processed = process_chatting_clip(
-                input_path=downloaded_file,
-                output_path=PROCESSED_CLIP_PATH,
+            processed = process_gameplay_clip( # Remettre process_chatting_clip après les tests
+                input_path=raw_clip_path,
+                output_path=processed_clip_path,
                 max_duration_seconds=get_top_clips.MAX_VIDEO_DURATION_SECONDS,
                 clip_data=clip
             )
         else:
             print("🛠️  Application du traitement GAMEPLAY")
             processed = process_gameplay_clip(
-                input_path=downloaded_file,
-                output_path=PROCESSED_CLIP_PATH,
+                input_path=raw_clip_path,
+                output_path=processed_clip_path,
                 max_duration_seconds=get_top_clips.MAX_VIDEO_DURATION_SECONDS,
                 clip_data=clip
             )
@@ -111,15 +110,15 @@ def main():
         if not processed:
             continue
 
-        # Génération des métadonnées
+        # Métadonnées
         metadata = generate_metadata.generate_youtube_metadata(clip)
 
-        # Upload YouTube activé
+        # Upload YouTube
         try:
             youtube_service = upload_youtube.get_authenticated_service()
             video_id = upload_youtube.upload_youtube_short(
                 youtube_service,
-                processed,
+                processed_clip_path,
                 metadata
             )
             print(f"🎉 Short YouTube publié ! ID: {video_id}")
@@ -128,10 +127,19 @@ def main():
             video_id = None
 
         if video_id:
-            add_to_history(history, clip['id'], video_id)
+            add_to_history(history, clip_id, video_id)
             save_published_history(history)
             today_published_ids = get_today_published_ids(history)
             published_count += 1
+
+        # Nettoyage local
+        try:
+            if os.path.exists(raw_clip_path):
+                os.remove(raw_clip_path)
+            if os.path.exists(processed_clip_path):
+                os.remove(processed_clip_path)
+        except Exception as e:
+            print(f"⚠️ Impossible de supprimer les fichiers temporaires : {e}")
 
     print(f"\n🎉 {published_count} Short(s) traité(s) avec succès.")
 
