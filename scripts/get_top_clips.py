@@ -40,7 +40,7 @@ def fetch_clips(access_token, params):
     resp.raise_for_status()
     return resp.json().get("data", [])
 
-def get_eligible_short_clips(access_token, num_clips_per_source=50, days_ago=30, already_published_clip_ids=None):
+def get_eligible_short_clips(access_token, num_clips_per_source=50, days_ago=None, already_published_clip_ids=None):
     if already_published_clip_ids is None:
         already_published_clip_ids = []
 
