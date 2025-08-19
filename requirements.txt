@@ -8,3 +8,4 @@ yt-dlp
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
+opencv-python>=4.5.3
