@@ -49,7 +49,7 @@ def generate_youtube_metadata(clip_data):
     today_date = datetime.now().strftime('%d %B %Y')
 
     # Titre du Short
-    title = f"{clip_title_clean} par @{broadcaster_name} | Anyme Rediff Twitch - {today_date}"
+    title = f"{clip_title_clean}"
     # S'assurer que le titre ne dépasse pas 100 caractères pour YouTube
     if len(title) > 100:
         # Tronque au lieu de couper brutalement pour éviter un titre trop long
@@ -62,25 +62,29 @@ def generate_youtube_metadata(clip_data):
     clean_game_name_for_hashtag = game_name.replace(' ', '')
 
 
-    description = f"""Les meilleurs moments de Twitch par {broadcaster_name} !
-Ce Short présente le clip le plus vu du jour : "{clip_title_raw}"
+    description = f"""🔻 DÉROULE LA DESCRIPTION 🔻
 
-N'oubliez pas de vous abonner pour plus de Shorts Twitch chaque jour !
-Chaîne de {broadcaster_name} : https://www.twitch.tv/{clean_broadcaster_name_for_url}
-Lien direct vers le clip : {clip_data.get('url', 'N/A')}
+Montage : moi-même
+Miniature : moi-même
 
-#Twitch #Shorts #ClipsTwitch #Gaming #{clean_broadcaster_name_for_url} #{clean_game_name_for_hashtag}
+Chaîne principale : @anyme0233
+
+🔻  RÉSEAUX SOCIAUX  🔻
+
+▶️ Twitch |   / Anyme023 
+▶️ Instagram |  / Anyme023  
+▶️ Twitter |   / Anyme023Off
+▶️ TikTok |   / Anyme023
+
+ABONNE-TOI !
+
+Lien du clip originel "{clip_title_raw}": {clip_data.get('url', 'N/A')}
 """
     # YouTube limite les descriptions à 5000 caractères, ce qui est largement suffisant ici.
 
     # Tags du Short
     # NOUVELLE LOGIQUE POUR LES TAGS : Assurez-vous qu'ils sont une LISTE de chaînes
-    raw_tags = [
-        "Twitch", "Shorts", "ClipsTwitch", "MeilleursMomentsTwitch",
-        "Gaming", "Gameplay", "Drôle", "Épique", "Highlight", 
-        broadcaster_name, game_name,
-        "TwitchFr", "ShortsGaming"
-    ]
+    raw_tags = []
     
     # Nettoyage et normalisation des tags:
     # 1. Convertir en minuscules pour la cohérence
