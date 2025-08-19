@@ -19,7 +19,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 os.makedirs(DATA_DIR, exist_ok=True)
 
 PUBLISHED_HISTORY_FILE = os.path.join(DATA_DIR, 'published_shorts_history.json')
-NUMBER_OF_CLIPS_TO_ATTEMPT_TO_PUBLISH = 1 # POUR LES TESTS , REMETTRE 3 SI BESOIN
+NUMBER_OF_CLIPS_TO_ATTEMPT_TO_PUBLISH = 2 # POUR LES TESTS , REMETTRE 3 SI BESOIN
 
 def load_published_history():
     if not os.path.exists(PUBLISHED_HISTORY_FILE):
