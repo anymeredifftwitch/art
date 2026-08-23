@@ -1,0 +1,34 @@
+# Secrets et credentials
+client_secret.json
+token.json
+*.json
+!published_shorts_history.json
+
+# Fichiers vidéo générés
+data/*.mp4
+data/*.m4a
+data/*.wav
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environnement
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Freebuff interne
+.freebuff/
+
+# Sauf l'historique de publication (à tracker)
+!data/published_shorts_history.json
