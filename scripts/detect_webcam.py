@@ -164,7 +164,7 @@ def detect_webcam(video_path, num_samples=10, confidence_threshold=0.65):
 
     print(f"Detection webcam : backend = {backend}")
 
-    if backend == "mediapipe":
+    if backend and backend.startswith("mediapipe"):
         detect_fn = _detect_faces_mediapipe
     else:
         detect_fn = _detect_faces_opencv
@@ -209,7 +209,7 @@ def detect_webcam(video_path, num_samples=10, confidence_threshold=0.65):
 
     clip.close()
 
-    if backend == "mediapipe" and hasattr(detector, "close"):
+    if backend and backend.startswith("mediapipe") and hasattr(detector, "close"):
         detector.close()
 
     hit_rate = len(detected_bboxes) / max(len(sample_times), 1)
