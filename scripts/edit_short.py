@@ -103,17 +103,6 @@ def _progress_bar(duration, target_w):
 
 def _cta_clip(text, start_time, duration):
     """Call-to-action discret : fade in/out en bas."""
-
-    def _opacity(t):
-        local_t = t - start_time
-        if local_t < 0.0:
-            return 0.0
-        fade_in = min(local_t / 0.2, 1.0)
-        if local_t > 1.8:
-            fade_out = max(0.0, (2.0 - local_t) / 0.2)
-            return min(fade_in, fade_out)
-        return fade_in
-
     tc = _text(
         text,
         font=FONT_BOLD,
@@ -125,7 +114,8 @@ def _cta_clip(text, start_time, duration):
     tc = (
         tc.set_duration(duration)
         .set_position(("center", 1740))
-        .set_opacity(_opacity)
+        .crossfadein(0.25)
+        .crossfadeout(0.25)
     )
     return tc
 
