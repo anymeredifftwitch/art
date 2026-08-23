@@ -13,10 +13,13 @@ Pipeline :
 """
 
 import os
+import tempfile
 import numpy as np
 from moviepy.editor import (
     VideoFileClip,
     CompositeVideoClip,
+    CompositeAudioClip,
+    AudioFileClip,
     TextClip,
     ColorClip,
     VideoClip,
@@ -142,6 +145,35 @@ def _title_banner(duration, text):
     return comp.set_position((0, 0))
 
 
+def _generate_tts(text, max_duration):
+    """
+    Génère un fichier audio TTS (Google TTS) pour le texte donné.
+    Renvoie un AudioFileClip calé sur max_duration.
+    """
+    if not text.strip():
+        return None
+    try:
+        from gtts import gTTS
+        tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+        tmp.close()
+        tts = gTTS(text=text, lang="fr", slow=False)
+        tts.save(tmp.name)
+        audio = AudioFileClip(tmp.name)
+        # Si le TTS est plus court que le hook, on laisse le silence naturel
+        if audio.duration > max_duration:
+            audio = audio.subclip(0, max_duration)
+        # Cleanup différé (on ne peut pas supprimer tant que moviepy lit)
+        def _cleanup():
+            try:
+                os.unlink(tmp.name)
+            except Exception:
+                pass
+        return audio
+    except Exception as e:
+        print(f"⚠️  TTS indisponible (gTTS) : {e}")
+        return None
+
+
 def _fullscreen_zoom(clip):
     """
     Zoom centré pour remplir 1080x1920 sans letterboxing.
@@ -202,9 +234,19 @@ def edit_short(
     hook_end = min(audio_analysis.get("hook_end", 3.0), full_dur)
     hook = clip_raw.subclip(hook_start, hook_end)
 
+    # Hook title: reuse the AI-generated overlay_title as hook text
+    hook_title = clip_data.get("overlay_title", "")
+    hook_title = "".join(c for c in hook_title if c.isprintable()).strip()
+    if not hook_title or len(hook_title) < 3:
+        hook_title = "🔥 BEST MOMENT"
+
+    # TTS voiceover that reads the title during the hook (TikTok style)
+    hook_tts_audio = _generate_tts(hook_title, hook.duration)
+
     # Fond pill opaque derrière le hook
     hook_pill_h = 90
-    hook_pill_w = 500
+    # Wider pill for longer titles
+    hook_pill_w = min(900, max(500, len(hook_title) * 18))
     hook_pill = (
         ColorClip((hook_pill_w, hook_pill_h), color=(0, 0, 0))
         .set_duration(hook.duration)
@@ -216,7 +258,7 @@ def edit_short(
         .set_duration(hook.duration)
     )
     hook_label = (
-        _text("🔥 BEST MOMENT", font=FONT_BOLD, size=46,
+        _text(hook_title, font=FONT_BOLD, size=42,
               color="white", stroke_color="black", stroke_width=0.8)
         .set_duration(hook.duration)
         .set_position(("center", "center"))
@@ -233,6 +275,22 @@ def edit_short(
         [hook_full, hook_badge.set_position(("center", 760))],
         size=RESOLUTION,
     ).set_duration(hook.duration)
+
+    # Add TTS voiceover to the hook
+    if hook_tts_audio is not None:
+        try:
+            hook_video_audio = hook.audio if hook.audio is not None else hook_full.audio
+            if hook_video_audio is not None:
+                # Mix: original audio lowered + TTS on top
+                mixed = CompositeAudioClip([
+                    hook_video_audio.volumex(0.3),
+                    hook_tts_audio,
+                ])
+                hook_comp = hook_comp.set_audio(mixed)
+            else:
+                hook_comp = hook_comp.set_audio(hook_tts_audio)
+        except Exception as e:
+            print(f"⚠️  Impossible de mixer le TTS : {e}")
 
     # ===================================================================
     # 2. Éléments statiques du corps principal
@@ -306,7 +364,7 @@ def edit_short(
                 continue
             sc = _subtitle_clip(group, dur)
             if sc is not None:
-                sc = sc.set_start(start).set_position(("center", 1550))
+                sc = sc.set_start(start).set_position(("center", 1350))
                 subtitle_layers.append(sc)
 
     # ===================================================================
