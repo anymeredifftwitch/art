@@ -24,7 +24,7 @@ def _extract_audio(video_path, audio_path):
     return audio_path
 
 
-def transcribe(video_path, model_size="tiny", device="cpu", compute_type="int8"):
+def transcribe(video_path, model_size="medium", device="cpu", compute_type="int8"):
     """
     Transcrit la parole du clip.
 
@@ -46,7 +46,7 @@ def transcribe(video_path, model_size="tiny", device="cpu", compute_type="int8")
         return []
 
     try:
-        print("🧠 Transcription en cours (Whisper tiny)…")
+        print("🧠 Transcription en cours (Whisper medium)…")
         model = WhisperModel(model_size, device=device, compute_type=compute_type)
         segments, _ = model.transcribe(
             audio_path,

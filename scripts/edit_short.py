@@ -18,7 +18,6 @@ import numpy as np
 from moviepy.editor import (
     VideoFileClip,
     CompositeVideoClip,
-    CompositeAudioClip,
     AudioFileClip,
     TextClip,
     ColorClip,
@@ -238,10 +237,7 @@ def edit_short(
     hook_title = clip_data.get("overlay_title", "")
     hook_title = "".join(c for c in hook_title if c.isprintable()).strip()
     if not hook_title or len(hook_title) < 3:
-        hook_title = "🔥 BEST MOMENT"
-
-    # TTS voiceover that reads the title during the hook (TikTok style)
-    hook_tts_audio = _generate_tts(hook_title, hook.duration)
+        hook_title = "BEST MOMENT"
 
     # Fond pill opaque derrière le hook
     hook_pill_h = 90
@@ -275,22 +271,6 @@ def edit_short(
         [hook_full, hook_badge.set_position(("center", 760))],
         size=RESOLUTION,
     ).set_duration(hook.duration)
-
-    # Add TTS voiceover to the hook
-    if hook_tts_audio is not None:
-        try:
-            hook_video_audio = hook.audio if hook.audio is not None else hook_full.audio
-            if hook_video_audio is not None:
-                # Mix: original audio lowered + TTS on top
-                mixed = CompositeAudioClip([
-                    hook_video_audio.volumex(0.3),
-                    hook_tts_audio,
-                ])
-                hook_comp = hook_comp.set_audio(mixed)
-            else:
-                hook_comp = hook_comp.set_audio(hook_tts_audio)
-        except Exception as e:
-            print(f"⚠️  Impossible de mixer le TTS : {e}")
 
     # ===================================================================
     # 2. Éléments statiques du corps principal
