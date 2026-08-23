@@ -13,6 +13,61 @@ import numpy as np
 # Backend selection
 # ---------------------------------------------------------------------------
 
+def _find_or_download_cascade():
+    """Trouve ou telecharge le fichier cascade Haar pour OpenCV."""
+    import cv2
+
+    # Chercher dans les chemins standards
+    candidates = [
+        os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml"),
+    ]
+    # cv2 peut etre dans un dossier data/ a cote du module
+    try:
+        cv2_dir = os.path.dirname(cv2.__file__)
+        candidates.append(os.path.join(cv2_dir, "data", "haarcascade_frontalface_default.xml"))
+    except Exception:
+        pass
+
+    # Chercher recursivement dans site-packages
+    try:
+        import site
+        for sp in site.getsitepackages():
+            for root, dirs, files in os.walk(sp):
+                if "haarcascade_frontalface_default.xml" in files:
+                    candidates.append(os.path.join(root, "haarcascade_frontalface_default.xml"))
+                    break
+    except Exception:
+        pass
+
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+
+    # Dernier recours : telecharger
+    cascade_url = (
+        "https://raw.githubusercontent.com/opencv/opencv/master/data/"
+        "haarcascades/haarcascade_frontalface_default.xml"
+    )
+    cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "opencv_cascade")
+    local_path = os.path.join(cache_dir, "haarcascade_frontalface_default.xml")
+
+    if os.path.exists(local_path):
+        return local_path
+
+    try:
+        import requests
+        os.makedirs(cache_dir, exist_ok=True)
+        r = requests.get(cascade_url, timeout=15)
+        r.raise_for_status()
+        with open(local_path, "wb") as f:
+            f.write(r.content)
+        print(f"Cascade Haar telechargee dans {local_path}")
+        return local_path
+    except Exception as e:
+        print(f"Impossible de telecharger la cascade Haar : {e}")
+        return None
+
+
 def _get_detector(confidence_threshold=0.65):
     """
     Essaie plusieurs backends pour la detection de visage.
@@ -41,17 +96,15 @@ def _get_detector(confidence_threshold=0.65):
     except Exception as e:
         errors.append(f"mediapipe.python.solutions: {e}")
 
-    # 3. Fallback OpenCV Haar cascade
+    # 3. Fallback OpenCV Haar cascade (local)
     try:
         import cv2
-        cascade_path = os.path.join(
-            cv2.data.haarcascades, "haarcascade_frontalface_default.xml"
-        )
-        if os.path.exists(cascade_path):
+        cascade_path = _find_or_download_cascade()
+        if cascade_path:
             detector = cv2.CascadeClassifier(cascade_path)
             return detector, "opencv_haar"
         else:
-            errors.append(f"opencv: cascade introuvable a {cascade_path}")
+            errors.append("opencv: cascade introuvable")
     except Exception as e:
         errors.append(f"opencv: {e}")
 

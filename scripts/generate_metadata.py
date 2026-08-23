@@ -1,8 +1,8 @@
 # scripts/generate_metadata.py
 """
-Génération de métadonnées YouTube enrichies :
-1. Essai via API Groq (Llama 3.1, gratuite) → titre accrocheur + hashtags
-2. Fallback heuristique si l'API échoue / n'est pas configurée
+Generation de metadonnees YouTube enrichies :
+1. Essai via API Groq (gratuite) -> titre accrocheur + hashtags
+2. Fallback heuristique si l'API echoue / n'est pas configuree
 """
 
 import os
@@ -12,7 +12,7 @@ import locale
 
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = "llama-3.1-8b-instant"
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 
 def _groq_title_hashtags(clip_data):
@@ -75,17 +75,16 @@ def _heuristic_title(clip_data):
     streamer = clip_data.get("broadcaster_name", "")
     game = clip_data.get("game_name") or ""
 
-    # Patterns emotionnels => emoji
     emoji_map = {
-        r"\b(rire|mdr|lol|drole|humour|rigol)\w*": "😂",
-        r"\b(clutch|incroyable|epique|insane|ouf|wtf|omg)\w*": "🔥",
-        r"\b(fail|rate|nul|naze|catastroph)\w*": "💀",
-        r"\b(tr(i|e)ste|pleur|emotion|touchant)\w*": "😢",
-        r"\b(rage|enerve|tilt|rageux)\w*": "😡",
-        r"\b(beaux?|magnifique|style|propre|satisf[ai])\w*": "✨",
+        r"\b(rire|mdr|lol|drole|humour|rigol)\w*": "\U0001f602",
+        r"\b(clutch|incroyable|epique|insane|ouf|wtf|omg)\w*": "\U0001f525",
+        r"\b(fail|rate|nul|naze|catastroph)\w*": "\U0001f480",
+        r"\b(tr(i|e)ste|pleur|emotion|touchant)\w*": "\U0001f622",
+        r"\b(rage|enerve|tilt|rageux)\w*": "\U0001f620",
+        r"\b(beaux?|magnifique|style|propre|satisf[ai])\w*": "\u2728",
     }
 
-    selected_emoji = "🎮"
+    selected_emoji = "\U0001f3ae"
     for pattern, emoji in emoji_map.items():
         if re.search(pattern, title_clean.lower()):
             selected_emoji = emoji
@@ -151,20 +150,21 @@ def generate_youtube_metadata(clip_data):
 
     today = datetime.now().strftime("%d %B %Y")
 
+    # IMPORTANT : pas de < > dans la description (interdits par l'API YouTube)
     description = (
-        f"🔻 DEROULE LA DESCRIPTION 🔻\n\n"
-        f"📅 {today}\n"
-        f"🎮 {game}\n"
-        f"👤 @{streamer}\n\n"
-        f"Montage : automatique 🤖\n\n"
-        f"Chaine principale : @anyme0233\n\n"
-        f"🔻 RESEAUX SOCIAUX 🔻\n\n"
-        f"> Twitch | anyme023\n"
-        f"> Instagram | anyme023\n"
-        f"> Twitter | Anyme023Off\n"
-        f"> TikTok | anyme023\n\n"
-        f"ABONNE-TOI ! 🔔\n\n"
-        f"Lien du clip originel << {titre_brut} >>:\n{clip_url}\n"
+        "DEROULE LA DESCRIPTION !\n\n"
+        f"{today}\n"
+        f"Jeu : {game}\n"
+        f"Streamer : @{streamer}\n\n"
+        "Montage : automatique\n\n"
+        "Chaine principale : @anyme0233\n\n"
+        "RESEAUX SOCIAUX :\n"
+        "- Twitch : anyme023\n"
+        "- Instagram : anyme023\n"
+        "- Twitter : Anyme023Off\n"
+        "- TikTok : anyme023\n\n"
+        "ABONNE-TOI !\n\n"
+        f"Clip original : {clip_url}\n"
     )
 
     return {
