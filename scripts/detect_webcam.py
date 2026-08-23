@@ -148,7 +148,7 @@ def _detect_faces_opencv(detector, frame):
 # ---------------------------------------------------------------------------
 
 
-def detect_webcam(video_path, num_samples=10, confidence_threshold=0.65):
+def detect_webcam(video_path, num_samples=10, confidence_threshold=0.50):
     """
     Analyse plusieurs frames du clip pour detecter une webcam (visage du streamer).
 
@@ -214,11 +214,14 @@ def detect_webcam(video_path, num_samples=10, confidence_threshold=0.65):
 
     hit_rate = len(detected_bboxes) / max(len(sample_times), 1)
 
-    if hit_rate < 0.6 or len(detected_bboxes) < 2:
+    if hit_rate < 0.3 or len(detected_bboxes) < 1:
         print(
             f"Webcam non detectee (hit rate {hit_rate:.0%}, "
-            f"{len(detected_bboxes)}/{len(sample_times)}) -> plein ecran"
+            f"{len(detected_bboxes)}/{len(sample_times)}, "
+            f"seuil={0.3}, min_detections=1) -> plein ecran"
         )
+        if len(detected_bboxes) > 0:
+            print(f"  -> {len(detected_bboxes)} visages trouves mais hit rate insuffisant")
         return _no_webcam(sample_positions)
 
     # Coherence spatiale
@@ -229,7 +232,7 @@ def detect_webcam(video_path, num_samples=10, confidence_threshold=0.65):
     center_std = np.std(centers, axis=0)
     avg_box = tuple(int(v) for v in np.mean(boxes, axis=0))
 
-    if center_std[0] > w * 0.25 or center_std[1] > h * 0.25:
+    if center_std[0] > w * 0.40 or center_std[1] > h * 0.40:
         print("Visages detectes mais positions trop variables -> plein ecran")
         return _no_webcam(sample_positions)
 
