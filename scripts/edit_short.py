@@ -313,8 +313,7 @@ def edit_short(
         lambda t: _kb_pos(t)
     ).set_duration(full_dur)
 
-    # PIP webcam : petit carré en haut à droite si détecté ET si le clip
-    # n'a pas déjà une webcam intégrée (cas des clips twitch avec overlay natif).
+    # PIP webcam : petit carré en haut à gauche (comme sur le clip Twitch originel).
     pip_clip = None
     pip_border = None
     if has_webcam and webcam_info.get("bbox"):
@@ -322,16 +321,16 @@ def edit_short(
         x1, y1, x2, y2 = bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]
         # Crop la zone webcam depuis le clip original
         pip = clip_raw.crop(x1=x1, y1=y1, x2=x2, y2=y2)
-        # Taille cible : ~250px de large dans le coin haut-droit
-        pip_w = 250
+        # Taille cible : ~220px de large dans le coin haut-gauche
+        pip_w = 220
         pip_h = int(pip_w * (y2 - y1) / max(x2 - x1, 1))
         pip = pip.resize((pip_w, pip_h))
         pip = pip.set_duration(full_dur)
-        pip = pip.set_position((RESOLUTION[0] - pip_w - 20, 170))
+        pip = pip.set_position((20, 170))
         # Bordure blanche fine autour du PIP
         pip_border = ColorClip((pip_w + 6, pip_h + 6), color=(255, 255, 255))
         pip_border = pip_border.set_duration(full_dur).set_opacity(0.8)
-        pip_border = pip_border.set_position((RESOLUTION[0] - pip_w - 23, 167))
+        pip_border = pip_border.set_position((17, 167))
         pip_clip = pip
 
     # Composition de base

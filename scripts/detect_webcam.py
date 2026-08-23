@@ -151,6 +151,7 @@ def _detect_faces_opencv(detector, frame):
 def detect_webcam(video_path, num_samples=10, confidence_threshold=0.50):
     """
     Analyse plusieurs frames du clip pour detecter une webcam (visage du streamer).
+    La detection est restreinte au coin haut-gauche (top-left 40% x 40%).
 
     Retourne :
         dict : {"has_webcam": bool, "bbox": {...}, "sample_positions": [...]}
@@ -173,6 +174,10 @@ def detect_webcam(video_path, num_samples=10, confidence_threshold=0.50):
     duration = clip.duration
     w, h = clip.size
 
+    # ROI : coin haut-gauche (40% largeur, 40% hauteur)
+    roi_x1, roi_y1 = 0, 0
+    roi_x2, roi_y2 = int(w * 0.40), int(h * 0.40)
+
     # Points d'echantillonnage
     sample_times = []
     segment = max(duration / (num_samples + 1), 0.5)
@@ -190,18 +195,29 @@ def detect_webcam(video_path, num_samples=10, confidence_threshold=0.50):
 
     for t in sample_times:
         try:
-            frame = clip.get_frame(t)
+            full_frame = clip.get_frame(t)
         except Exception:
             continue
 
+        # Cropper la ROI haut-gauche pour la detection
+        roi_frame = full_frame[roi_y1:roi_y2, roi_x1:roi_x2, :]
+
         try:
-            bboxes = detect_fn(detector, frame)
+            bboxes = detect_fn(detector, roi_frame)
         except Exception:
             bboxes = []
 
-        if bboxes:
+        # Re-offsetter les bboxes dans les coordonnees du frame complet
+        global_bboxes = []
+        for (rx1, ry1, rx2, ry2) in bboxes:
+            global_bboxes.append((
+                rx1 + roi_x1, ry1 + roi_y1,
+                rx2 + roi_x1, ry2 + roi_y1,
+            ))
+
+        if global_bboxes:
             # Prendre le plus grand visage
-            best = max(bboxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+            best = max(global_bboxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
             detected_bboxes.append(best)
             sample_positions.append({"t": t, "bbox": best, "score": 1.0})
         else:
