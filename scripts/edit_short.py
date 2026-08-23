@@ -5,13 +5,11 @@ Montage vidéo unifié pour Shorts YouTube (9:16).
 Pipeline :
 1.  Hook d'intro (teaser 2-3s les plus intenses)
 2.  Gameplay fullscreen 9:16 avec Ken Burns
-3.  Webcam en PIP (picture-in-picture) en haut à droite
-4.  Sous-titres centrés (texte blanc avec contour, pas de fond)
-5.  Flashs sur pics audio
-6.  Barre de progression fine
-7.  Call-to-action discret (bas de l'écran)
-8.  Titre en haut sur fond dégradé
-9.  Séquence de fin
+3.  Sous-titres style TikTok (blanc sur fond pill semi-transparent)
+4.  Flashs sur pics audio
+5.  Barre de progression fine
+6.  Titre overlay généré par IA en haut
+7.  Séquence de fin
 """
 
 import os
@@ -65,21 +63,36 @@ def _text(text, font=FONT_BOLD, size=70, color="white",
 
 
 def _subtitle_clip(group, duration):
-    """Sous-titre simple : texte blanc avec contour noir (pas de fond)."""
+    """
+    Sous-titre style TikTok : texte blanc sur fond semi-transparent.
+    Pas de stroke épais qui rend le texte fantôme.
+    """
     text = group.get("text", "")
     if not text.strip():
         return None
 
+    # Texte blanc pur, sans contour (le fond pill suffit pour la lisibilité)
     tc = _text(
         text,
         font=FONT_BOLD,
-        size=52,
+        size=56,
         color="white",
-        stroke_color="black",
-        stroke_width=3.5,
+        stroke_color="white",
+        stroke_width=0,
     )
     tc = tc.set_duration(duration)
-    return tc
+
+    # Fond pill : bande noire semi-transparente derrière le texte
+    bar_h = int(tc.h * 1.3) if tc.h else 76
+    bar = ColorClip((RESOLUTION[0], bar_h), color=(0, 0, 0))
+    bar = bar.set_duration(duration).set_opacity(0.45)
+
+    comp = CompositeVideoClip(
+        [bar.set_position(("center", 0)),
+         tc.set_position(("center", "center"))],
+        size=(RESOLUTION[0], bar_h),
+    ).set_duration(duration)
+    return comp
 
 
 def _progress_bar(duration, target_w):
@@ -102,18 +115,23 @@ def _create_background(duration):
 
 
 def _top_gradient(duration):
-    """Bandeau sombre semi-transparent en haut pour lisibilité du titre."""
-    h = 180
-    # Simple rectangle noir semi-transparent — pas de masque custom
-    # qui causerait des corruptions avec moviepy 1.0.3
+    """Bandeau sombre en haut pour lisibilité du titre."""
+    h = 160
     bar = ColorClip((RESOLUTION[0], h), color=(0, 0, 0))
-    bar = bar.set_duration(duration).set_opacity(0.50)
+    bar = bar.set_duration(duration).set_opacity(0.65)
     return bar.set_position((0, 0))
 
 
 def _fullscreen_zoom(clip):
-    """Zoom centré pour remplir 1080x1920 (garde l'audio)."""
-    c = clip.resize(height=RESOLUTION[1])
+    """
+    Zoom centré pour remplir 1080x1920 sans letterboxing.
+    Redimensionne pour couvrir les deux dimensions, puis crop le surplus.
+    """
+    # Échelle pour couvrir toute la surface (max des deux ratios)
+    scale = max(RESOLUTION[0] / clip.w, RESOLUTION[1] / clip.h)
+    new_w = int(clip.w * scale)
+    new_h = int(clip.h * scale)
+    c = clip.resize((new_w, new_h))
     c = c.crop(
         x_center=c.w / 2,
         width=RESOLUTION[0],
@@ -166,7 +184,7 @@ def edit_short(
 
     hook_label = (
         _text("🔥 BEST MOMENT", font=FONT_BOLD, size=48,
-              color="white", stroke_color="black", stroke_width=3.0)
+              color="white", stroke_color="black", stroke_width=1.5)
         .set_duration(hook.duration)
     )
 
@@ -194,7 +212,7 @@ def edit_short(
         gradient = _top_gradient(full_dur)
         title_clip = (
             _text(overlay_title, font=FONT_BOLD, size=42,
-                  color="white", stroke_color="black", stroke_width=2.5)
+                  color="white", stroke_color="black", stroke_width=1.5)
             .set_duration(full_dur)
             .set_position(("center", 36))
         )
