@@ -114,12 +114,32 @@ def _create_background(duration):
     return ColorClip(RESOLUTION, color=(12, 12, 12)).set_duration(duration)
 
 
-def _top_gradient(duration):
-    """Bandeau sombre en haut pour lisibilité du titre."""
-    h = 160
+def _title_banner(duration, text):
+    """
+    Bandeau titre style TikTok : fond noir quasi-opaque + texte blanc large.
+    Renvoie un CompositeVideoClip centré en haut.
+    """
+    h = 140
+    # Fond noir quasi-opaque
     bar = ColorClip((RESOLUTION[0], h), color=(0, 0, 0))
-    bar = bar.set_duration(duration).set_opacity(0.65)
-    return bar.set_position((0, 0))
+    bar = bar.set_duration(duration).set_opacity(0.85)
+
+    # Accent : fine ligne rouge en bas du bandeau
+    accent = ColorClip((RESOLUTION[0], 4), color=(229, 9, 20))
+    accent = accent.set_duration(duration)
+
+    # Texte blanc, plus gros, stroke fin
+    tc = _text(text, font=FONT_BOLD, size=52,
+               color="white", stroke_color="black", stroke_width=0.8)
+    tc = tc.set_duration(duration).set_position(("center", "center"))
+
+    comp = CompositeVideoClip(
+        [bar.set_position((0, 0)),
+         accent.set_position((0, h - 4)),
+         tc.set_position(("center", "center"))],
+        size=(RESOLUTION[0], h),
+    ).set_duration(duration)
+    return comp.set_position((0, 0))
 
 
 def _fullscreen_zoom(clip):
@@ -182,15 +202,35 @@ def edit_short(
     hook_end = min(audio_analysis.get("hook_end", 3.0), full_dur)
     hook = clip_raw.subclip(hook_start, hook_end)
 
-    hook_label = (
-        _text("🔥 BEST MOMENT", font=FONT_BOLD, size=48,
-              color="white", stroke_color="black", stroke_width=1.5)
+    # Fond pill opaque derrière le hook
+    hook_pill_h = 90
+    hook_pill_w = 500
+    hook_pill = (
+        ColorClip((hook_pill_w, hook_pill_h), color=(0, 0, 0))
+        .set_duration(hook.duration)
+        .set_opacity(0.80)
+    )
+    # Accent rouge à gauche du pill
+    hook_accent = (
+        ColorClip((6, hook_pill_h), color=(229, 9, 20))
         .set_duration(hook.duration)
     )
+    hook_label = (
+        _text("🔥 BEST MOMENT", font=FONT_BOLD, size=46,
+              color="white", stroke_color="black", stroke_width=0.8)
+        .set_duration(hook.duration)
+        .set_position(("center", "center"))
+    )
+    hook_badge = CompositeVideoClip(
+        [hook_pill.set_position((0, 0)),
+         hook_accent.set_position((0, 0)),
+         hook_label.set_position(("center", "center"))],
+        size=(hook_pill_w, hook_pill_h),
+    ).set_duration(hook.duration)
 
     hook_full = _fullscreen_zoom(hook)
     hook_comp = CompositeVideoClip(
-        [hook_full, hook_label.set_position(("center", 800))],
+        [hook_full, hook_badge.set_position(("center", 760))],
         size=RESOLUTION,
     ).set_duration(hook.duration)
 
@@ -206,16 +246,9 @@ def edit_short(
     if len(overlay_title) > 42:
         overlay_title = overlay_title[:39].strip() + "..."
 
-    title_clip = None
-    gradient = None
+    title_banner = None
     if overlay_title:
-        gradient = _top_gradient(full_dur)
-        title_clip = (
-            _text(overlay_title, font=FONT_BOLD, size=42,
-                  color="white", stroke_color="black", stroke_width=1.5)
-            .set_duration(full_dur)
-            .set_position(("center", 36))
-        )
+        title_banner = _title_banner(full_dur, overlay_title)
 
     # ===================================================================
     # 3. Gameplay fullscreen + webcam PIP
@@ -247,10 +280,8 @@ def edit_short(
     # le clip Twitch brut contient déjà ces overlays.
     # On garde uniquement le titre overlay (si généré) + barre de progression.
     base_elements = [bg, gameplay_clip]
-    if gradient is not None:
-        base_elements.append(gradient)
-    if title_clip is not None:
-        base_elements.append(title_clip)
+    if title_banner is not None:
+        base_elements.append(title_banner)
 
     # ===================================================================
     # 4. Flashs sur pics audio
