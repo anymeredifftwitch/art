@@ -41,6 +41,9 @@ def analyze_audio(video_path, hook_duration=3.0, peak_threshold_factor=1.4):
         audio_arr = clip.audio.to_soundarray(fps=22050, nbytes=2, quantize=True)
         clip.close()
 
+        # Robustesse : certains formats de retour peuvent etre instables
+        audio_arr = np.asarray(audio_arr, dtype=np.float64)
+
         if audio_arr.size == 0:
             return {
                 "hook_start": 0.0,
@@ -48,8 +51,10 @@ def analyze_audio(video_path, hook_duration=3.0, peak_threshold_factor=1.4):
                 "peaks": [],
             }
 
-        if audio_arr.ndim > 1:
-            audio_mono = audio_arr.mean(axis=1)
+        if audio_arr.ndim > 1 and audio_arr.shape[1] > 1:
+            audio_mono = np.mean(audio_arr, axis=1)
+        elif audio_arr.ndim > 1:
+            audio_mono = audio_arr[:, 0]
         else:
             audio_mono = audio_arr
 

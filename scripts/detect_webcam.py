@@ -1,38 +1,121 @@
 # scripts/detect_webcam.py
 """
-Détection robuste de la zone webcam via MediaPipe Face Detection.
-Échantillonnage multi-frames (10 frames) + vérification de cohérence spatiale.
+Detection robuste de la zone webcam.
+Essaie MediaPipe, puis fallback OpenCV Haar cascades.
+Echantillonnage multi-frames (10 frames) + verification de coherence spatiale.
 """
 
 import os
 import numpy as np
 
 
-def detect_webcam(video_path, num_samples=10, confidence_threshold=0.65):
-    """
-    Analyse plusieurs frames du clip pour détecter une webcam (visage du streamer).
+# ---------------------------------------------------------------------------
+# Backend selection
+# ---------------------------------------------------------------------------
 
-    Retourne :
-        dict | None :
-            {
-                "has_webcam": bool,
-                "bbox": {"x1": int, "y1": int, "x2": int, "y2": int},
-                "sample_positions": list[dict],  # pour debug / tracking
-            }
+def _get_detector(confidence_threshold=0.65):
     """
+    Essaie plusieurs backends pour la detection de visage.
+    Retourne (detector, backend_name) ou (None, None).
+    """
+    # 1. mediapipe.solutions (API legacy)
     try:
         import mediapipe as mp
-    except ImportError:
-        print("❌ mediapipe non installé. Détection webcam désactivée.")
+        mp_face = mp.solutions.face_detection
+        detector = mp_face.FaceDetection(
+            model_selection=0, min_detection_confidence=confidence_threshold
+        )
+        return detector, "mediapipe"
+    except (ImportError, AttributeError):
+        pass
+
+    # 2. mediapipe via python.solutions (versions recentes)
+    try:
+        from mediapipe.python.solutions import face_detection as mp_face
+        detector = mp_face.FaceDetection(
+            model_selection=0, min_detection_confidence=confidence_threshold
+        )
+        return detector, "mediapipe"
+    except (ImportError, AttributeError):
+        pass
+
+    # 3. Fallback OpenCV Haar cascade
+    try:
+        import cv2
+        cascade_path = os.path.join(
+            cv2.data.haarcascades, "haarcascade_frontalface_default.xml"
+        )
+        if os.path.exists(cascade_path):
+            detector = cv2.CascadeClassifier(cascade_path)
+            return detector, "opencv"
+    except (ImportError, AttributeError):
+        pass
+
+    return None, None
+
+
+def _detect_faces_mediapipe(detector, frame):
+    """Retourne une liste de bboxes (x1,y1,x2,y2) via MediaPipe."""
+    results = detector.process(frame)
+    bboxes = []
+    if results.detections:
+        h, w = frame.shape[:2]
+        for det in results.detections:
+            bbox = det.location_data.relative_bounding_box
+            x1 = int(bbox.xmin * w)
+            y1 = int(bbox.ymin * h)
+            x2 = int((bbox.xmin + bbox.width) * w)
+            y2 = int((bbox.ymin + bbox.height) * h)
+            bboxes.append((x1, y1, x2, y2))
+    return bboxes
+
+
+def _detect_faces_opencv(detector, frame):
+    """Retourne une liste de bboxes (x1,y1,x2,y2) via OpenCV Haar."""
+    gray = frame
+    if gray.ndim == 3:
+        try:
+            import cv2
+            gray = cv2.cvtColor(gray, cv2.COLOR_RGB2GRAY)
+        except Exception:
+            return []
+    faces = detector.detectMultiScale(
+        gray, scaleFactor=1.3, minNeighbors=5, minSize=(40, 40)
+    )
+    return [(x, y, x + w, y + h) for (x, y, w, h) in faces]
+
+
+# ---------------------------------------------------------------------------
+# API principale
+# ---------------------------------------------------------------------------
+
+
+def detect_webcam(video_path, num_samples=10, confidence_threshold=0.65):
+    """
+    Analyse plusieurs frames du clip pour detecter une webcam (visage du streamer).
+
+    Retourne :
+        dict : {"has_webcam": bool, "bbox": {...}, "sample_positions": [...]}
+    """
+    from moviepy.editor import VideoFileClip
+
+    detector, backend = _get_detector(confidence_threshold)
+    if detector is None:
+        print("Aucun backend de detection de visage disponible (mediapipe / opencv).")
         return _no_webcam()
 
-    from moviepy.editor import VideoFileClip
+    print(f"Detection webcam : backend = {backend}")
+
+    if backend == "mediapipe":
+        detect_fn = _detect_faces_mediapipe
+    else:
+        detect_fn = _detect_faces_opencv
 
     clip = VideoFileClip(video_path)
     duration = clip.duration
     w, h = clip.size
 
-    # Points d'échantillonnage répartis sur toute la durée
+    # Points d'echantillonnage
     sample_times = []
     segment = max(duration / (num_samples + 1), 0.5)
     for i in range(1, num_samples + 1):
@@ -44,11 +127,6 @@ def detect_webcam(video_path, num_samples=10, confidence_threshold=0.65):
         clip.close()
         return _no_webcam()
 
-    mp_face = mp.solutions.face_detection
-    face_detector = mp_face.FaceDetection(
-        model_selection=0, min_detection_confidence=confidence_threshold
-    )
-
     detected_bboxes = []
     sample_positions = []
 
@@ -58,37 +136,34 @@ def detect_webcam(video_path, num_samples=10, confidence_threshold=0.65):
         except Exception:
             continue
 
-        frame_h, frame_w = frame.shape[:2]
-        results = face_detector.process(frame)
+        try:
+            bboxes = detect_fn(detector, frame)
+        except Exception:
+            bboxes = []
 
-        if results.detections:
-            best = results.detections[0]
-            bbox = best.location_data.relative_bounding_box
-            x1 = int(bbox.xmin * frame_w)
-            y1 = int(bbox.ymin * frame_h)
-            x2 = int((bbox.xmin + bbox.width) * frame_w)
-            y2 = int((bbox.ymin + bbox.height) * frame_h)
-            detected_bboxes.append((x1, y1, x2, y2))
-            sample_positions.append(
-                {"t": t, "bbox": (x1, y1, x2, y2), "score": best.score[0]}
-            )
+        if bboxes:
+            # Prendre le plus grand visage
+            best = max(bboxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+            detected_bboxes.append(best)
+            sample_positions.append({"t": t, "bbox": best, "score": 1.0})
         else:
             sample_positions.append({"t": t, "bbox": None, "score": 0.0})
 
     clip.close()
-    face_detector.close()
 
-    hit_rate = len(detected_bboxes) / len(sample_times)
+    if backend == "mediapipe" and hasattr(detector, "close"):
+        detector.close()
 
-    # Il faut au moins 60 % de frames avec visage
+    hit_rate = len(detected_bboxes) / max(len(sample_times), 1)
+
     if hit_rate < 0.6 or len(detected_bboxes) < 2:
         print(
-            f"🔍 Webcam non détectée (hit rate {hit_rate:.0%}, "
-            f"{len(detected_bboxes)}/{len(sample_times)}) → plein écran"
+            f"Webcam non detectee (hit rate {hit_rate:.0%}, "
+            f"{len(detected_bboxes)}/{len(sample_times)}) -> plein ecran"
         )
         return _no_webcam(sample_positions)
 
-    # Vérifier la cohérence spatiale (variance)
+    # Coherence spatiale
     boxes = np.array(detected_bboxes, dtype=np.float64)
     centers = np.column_stack(
         [(boxes[:, 0] + boxes[:, 2]) / 2, (boxes[:, 1] + boxes[:, 3]) / 2]
@@ -97,12 +172,10 @@ def detect_webcam(video_path, num_samples=10, confidence_threshold=0.65):
     avg_box = tuple(int(v) for v in np.mean(boxes, axis=0))
 
     if center_std[0] > w * 0.25 or center_std[1] > h * 0.25:
-        print(
-            "🔍 Visages détectés mais positions trop variables → plein écran"
-        )
+        print("Visages detectes mais positions trop variables -> plein ecran")
         return _no_webcam(sample_positions)
 
-    # Marge de 15 %
+    # Marge 15%
     x1, y1, x2, y2 = avg_box
     margin_x = int((x2 - x1) * 0.15)
     margin_y = int((y2 - y1) * 0.15)
@@ -112,7 +185,7 @@ def detect_webcam(video_path, num_samples=10, confidence_threshold=0.65):
     y2 = min(h, y2 + margin_y)
 
     print(
-        f"✅ Webcam détectée (hit rate {hit_rate:.0%}) — bbox=({x1},{y1},{x2},{y2})"
+        f"Webcam detectee (hit rate {hit_rate:.0%}) -> bbox=({x1},{y1},{x2},{y2})"
     )
     return {
         "has_webcam": True,
