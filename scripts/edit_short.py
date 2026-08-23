@@ -51,7 +51,7 @@ def _text(text, font=FONT_BOLD, size=70, color="white",
           stroke_color="black", stroke_width=1.5):
     """TextClip securise (fallback si police absente)."""
     kwargs = dict(
-        text=text,
+        txt=text,
         fontsize=size,
         color=color,
         stroke_color=stroke_color,

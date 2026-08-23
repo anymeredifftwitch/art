@@ -18,6 +18,8 @@ def _get_detector(confidence_threshold=0.65):
     Essaie plusieurs backends pour la detection de visage.
     Retourne (detector, backend_name) ou (None, None).
     """
+    errors = []
+
     # 1. mediapipe.solutions (API legacy)
     try:
         import mediapipe as mp
@@ -25,19 +27,19 @@ def _get_detector(confidence_threshold=0.65):
         detector = mp_face.FaceDetection(
             model_selection=0, min_detection_confidence=confidence_threshold
         )
-        return detector, "mediapipe"
-    except (ImportError, AttributeError):
-        pass
+        return detector, "mediapipe.solutions"
+    except Exception as e:
+        errors.append(f"mediapipe.solutions: {e}")
 
-    # 2. mediapipe via python.solutions (versions recentes)
+    # 2. mediapipe.python.solutions
     try:
         from mediapipe.python.solutions import face_detection as mp_face
         detector = mp_face.FaceDetection(
             model_selection=0, min_detection_confidence=confidence_threshold
         )
-        return detector, "mediapipe"
-    except (ImportError, AttributeError):
-        pass
+        return detector, "mediapipe.python.solutions"
+    except Exception as e:
+        errors.append(f"mediapipe.python.solutions: {e}")
 
     # 3. Fallback OpenCV Haar cascade
     try:
@@ -47,10 +49,13 @@ def _get_detector(confidence_threshold=0.65):
         )
         if os.path.exists(cascade_path):
             detector = cv2.CascadeClassifier(cascade_path)
-            return detector, "opencv"
-    except (ImportError, AttributeError):
-        pass
+            return detector, "opencv_haar"
+        else:
+            errors.append(f"opencv: cascade introuvable a {cascade_path}")
+    except Exception as e:
+        errors.append(f"opencv: {e}")
 
+    print(f"Erreurs de chargement des backends: {' | '.join(errors)}")
     return None, None
 
 
