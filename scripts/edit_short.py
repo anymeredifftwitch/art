@@ -43,11 +43,6 @@ for p in [FONT_BOLD, FONT_REGULAR]:
         FONT_REGULAR = "Arial"
         break
 
-# PIP webcam
-PIP_SIZE_RATIO = 0.22       # Largeur du PIP = 22% de l'écran
-PIP_MARGIN = 16             # Marge depuis les bords
-PIP_BORDER = 4              # Épaisseur de la bordure blanche
-
 
 # ---------------------------------------------------------------------------
 # Utilitaires
@@ -101,45 +96,18 @@ def _progress_bar(duration, target_w):
     return VideoClip(make_frame, duration=duration)
 
 
-def _cta_clip(text, start_time, duration):
-    """Call-to-action discret : fade in/out en bas."""
-    tc = _text(
-        text,
-        font=FONT_BOLD,
-        size=38,
-        color="white",
-        stroke_color="black",
-        stroke_width=2.0,
-    )
-    tc = (
-        tc.set_duration(duration)
-        .set_position(("center", 1740))
-        .crossfadein(0.25)
-        .crossfadeout(0.25)
-    )
-    return tc
-
-
 def _create_background(duration):
     """Fond sombre uni (plus propre que l'ancien fond théâtre)."""
     return ColorClip(RESOLUTION, color=(12, 12, 12)).set_duration(duration)
 
 
 def _top_gradient(duration):
-    """Bandeau sombre en haut pour lisibilité du titre (dégradé)."""
-    h = 200
-    bar = ColorClip((RESOLUTION[0], h), color=(0, 0, 0)).set_duration(duration)
-
-    # Masque dégradé : opaque en haut, transparent en bas
-    def make_mask(t):
-        mask = np.zeros((h, RESOLUTION[0]), dtype=np.uint8)
-        for y in range(h):
-            alpha = 1.0 - (y / h) ** 1.5
-            mask[y, :] = int(255 * alpha)
-        return mask
-
-    mask_clip = VideoClip(make_mask, duration=duration, ismask=True)
-    bar = bar.set_mask(mask_clip)
+    """Bandeau sombre semi-transparent en haut pour lisibilité du titre."""
+    h = 180
+    # Simple rectangle noir semi-transparent — pas de masque custom
+    # qui causerait des corruptions avec moviepy 1.0.3
+    bar = ColorClip((RESOLUTION[0], h), color=(0, 0, 0))
+    bar = bar.set_duration(duration).set_opacity(0.50)
     return bar.set_position((0, 0))
 
 
@@ -155,44 +123,6 @@ def _fullscreen_zoom(clip):
     if clip.audio is not None:
         c = c.set_audio(clip.audio)
     return c.set_position((0, 0))
-
-
-def _pip_webcam(clip_raw, bbox, full_dur):
-    """
-    Crée un PIP webcam (rectangle avec bordure blanche) en haut à droite.
-    Retourne le clip PIP prêt à être composité, ou None.
-    """
-    if bbox is None:
-        return None
-
-    x1, y1, x2, y2 = bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]
-
-    # Crop de la zone visage
-    face = clip_raw.crop(x1=x1, y1=y1, x2=x2, y2=y2)
-
-    # Redimensionner en PIP
-    pip_w = int(RESOLUTION[0] * PIP_SIZE_RATIO)
-    face = face.resize(width=pip_w)
-
-    # Bordure blanche : rectangle blanc légèrement plus grand derrière
-    border_w = pip_w + PIP_BORDER * 2
-    border_h = face.h + PIP_BORDER * 2
-    border = ColorClip((border_w, border_h), color=(255, 255, 255))
-    border = border.set_duration(full_dur).set_opacity(0.85)
-
-    # Position en haut à droite
-    pip_x = RESOLUTION[0] - border_w - PIP_MARGIN
-    pip_y = 160  # Sous le titre
-
-    comp = CompositeVideoClip(
-        [
-            border.set_position((0, 0)),
-            face.set_position((PIP_BORDER, PIP_BORDER)),
-        ],
-        size=(border_w, border_h),
-    ).set_duration(full_dur).set_position((pip_x, pip_y))
-
-    return comp
 
 
 # ---------------------------------------------------------------------------
@@ -251,34 +181,23 @@ def edit_short(
     # ===================================================================
     bg = _create_background(full_dur)
 
-    # Titre du clip (nettoyé)
-    title_raw = clip_data.get("title", "Titre du clip")
-    # Tronquer si trop long
-    if len(title_raw) > 55:
-        title_raw = title_raw[:52].strip() + "..."
-    # Nettoyer les caractères problématiques
-    title_clean = "".join(
-        c for c in title_raw if c.isprintable()
-    ).strip()
+    # Titre overlay : généré par l'IA à partir de la transcription
+    overlay_title = clip_data.get("overlay_title", "")
+    # Nettoyer
+    overlay_title = "".join(c for c in overlay_title if c.isprintable()).strip()
+    if len(overlay_title) > 42:
+        overlay_title = overlay_title[:39].strip() + "..."
 
-    title_clip = (
-        _text(title_clean, font=FONT_BOLD, size=44,
-              color="white", stroke_color="black", stroke_width=2.5)
-        .set_duration(full_dur)
-        .set_position(("center", 40))
-    )
-
-    # @streamer en bas
-    streamer = clip_data.get("broadcaster_name", "Streamer")
-    streamer_clip = (
-        _text(f"@{streamer}", font=FONT_REGULAR, size=30,
-              color="#AAAAAA", stroke_color="black", stroke_width=1.0)
-        .set_duration(full_dur)
-        .set_position(("center", 1860))
-    )
-
-    # Bandeau dégradé en haut
-    gradient = _top_gradient(full_dur)
+    title_clip = None
+    gradient = None
+    if overlay_title:
+        gradient = _top_gradient(full_dur)
+        title_clip = (
+            _text(overlay_title, font=FONT_BOLD, size=42,
+                  color="white", stroke_color="black", stroke_width=2.5)
+            .set_duration(full_dur)
+            .set_position(("center", 36))
+        )
 
     # ===================================================================
     # 3. Gameplay fullscreen + webcam PIP
@@ -306,13 +225,14 @@ def edit_short(
     ).set_duration(full_dur)
 
     # Composition de base
-    base_elements = [bg, gameplay_clip, gradient, title_clip, streamer_clip]
-
-    # PIP webcam
-    if has_webcam:
-        pip = _pip_webcam(clip_raw, webcam_info["bbox"], full_dur)
-        if pip is not None:
-            base_elements.append(pip)
+    # NOTE: on n'ajoute PAS de nom de streamer ni de CTA :
+    # le clip Twitch brut contient déjà ces overlays.
+    # On garde uniquement le titre overlay (si généré) + barre de progression.
+    base_elements = [bg, gameplay_clip]
+    if gradient is not None:
+        base_elements.append(gradient)
+    if title_clip is not None:
+        base_elements.append(title_clip)
 
     # ===================================================================
     # 4. Flashs sur pics audio
@@ -325,7 +245,7 @@ def edit_short(
         base_elements.append(flash)
 
     # ===================================================================
-    # 5. Sous-titres
+    # 5. Sous-titres (position basse pour éviter les overlays Twitch)
     # ===================================================================
     subtitle_layers = []
     if subtitles:
@@ -337,25 +257,19 @@ def edit_short(
                 continue
             sc = _subtitle_clip(group, dur)
             if sc is not None:
-                sc = sc.set_start(start).set_position(("center", 1320))
+                sc = sc.set_start(start).set_position(("center", 1550))
                 subtitle_layers.append(sc)
 
     # ===================================================================
-    # 6. Barre de progression + CTA
+    # 6. Barre de progression (pas de CTA : déjà dans le clip Twitch)
     # ===================================================================
     prog = _progress_bar(full_dur, RESOLUTION[0]).set_position(("center", 1916))
-
-    cta_layers = []
-    cta_points = [full_dur * 0.35, full_dur * 0.75]
-    for ct in cta_points:
-        cta = _cta_clip("ABONNE-TOI", ct, full_dur)
-        cta_layers.append(cta)
 
     # ===================================================================
     # 7. Composition finale du corps
     # ===================================================================
     corp = CompositeVideoClip(
-        base_elements + subtitle_layers + cta_layers + [prog],
+        base_elements + subtitle_layers + [prog],
         size=RESOLUTION,
     ).set_duration(full_dur)
 

@@ -141,6 +141,10 @@ def main():
         print("Detection webcam en cours...")
         webcam = detect_webcam(raw_path, num_samples=10)
 
+        # 6b. Titre overlay (Groq ou heuristique, basé sur la transcription)
+        overlay_title = generate_metadata.generate_video_title(clip, subs)
+        clip["overlay_title"] = overlay_title
+
         # 7. Montage unifié
         print("Montage video en cours...")
         edit_short(
@@ -158,8 +162,8 @@ def main():
             _cleanup(raw_path, processed_path)
             continue
 
-        # 8. Métadonnées (Groq + fallback)
-        metadata = generate_metadata.generate_youtube_metadata(clip)
+        # 8. Métadonnées (réutilise le titre overlay généré avant)
+        metadata = generate_metadata.generate_youtube_metadata(clip, overlay_title)
         # Override privacy si demandé via la CLI
         if PRIVACY_MODE != "public":
             metadata["privacyStatus"] = PRIVACY_MODE
