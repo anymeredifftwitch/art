@@ -130,11 +130,41 @@ def get_clips_by_ids(access_token, clip_ids):
                 "game_id": clip.get("game_id"),
                 "game_name": clip.get("game_name")
             })
-        print(f"✅ Récupéré {len(results)} clip(s) spécifique(s).")
+        if not results and cleaned_ids:
+            print(f"ℹ️  Twitch API : métadonnées non trouvées, fallback direct pour téléchargement yt-dlp.")
+            for cid in cleaned_ids:
+                url = cid if cid.startswith("http") else f"https://clips.twitch.tv/{cid}"
+                clip_id = cid.rstrip("/").split("/")[-1].split("?")[0]
+                results.append({
+                    "id": clip_id,
+                    "url": url,
+                    "title": "Anyme en Live",
+                    "broadcaster_name": "anyme023",
+                    "duration": 30.0,
+                    "language": "fr",
+                    "game_id": "",
+                    "game_name": "Gameplay",
+                })
+
+        print(f"✅ {len(results)} clip(s) prêt(s) pour traitement.")
         return results
     except Exception as e:
-        print(f"⚠️  Erreur lors de la récupération des clips par ID : {e}")
-        return []
+        print(f"⚠️  Erreur API clips ({e}), création directe des clips de secours...")
+        results = []
+        for cid in cleaned_ids:
+            url = cid if cid.startswith("http") else f"https://clips.twitch.tv/{cid}"
+            clip_id = cid.rstrip("/").split("/")[-1].split("?")[0]
+            results.append({
+                "id": clip_id,
+                "url": url,
+                "title": "Anyme en Live",
+                "broadcaster_name": "anyme023",
+                "duration": 30.0,
+                "language": "fr",
+                "game_id": "",
+                "game_name": "Gameplay",
+            })
+        return results
 
 if __name__ == "__main__":
     token = get_twitch_access_token()

@@ -107,7 +107,7 @@ def main(clip_ids_input=None, no_upload=False, keep_files=False):
         eligible_clips = get_top_clips.get_eligible_short_clips(
             access_token=twitch_token,
             num_clips_per_source=50,
-            days_ago=1,
+            days_ago=30,
             already_published_clip_ids=already_published,
         )
 
