@@ -356,6 +356,92 @@ def _fullscreen_zoom(clip):
 # Pipeline principal
 # ---------------------------------------------------------------------------
 
+def _build_layout_elements(subclip, duration, clip_type, webcam_info):
+    """
+    Construit les éléments de layout pour un segment vidéo :
+    - Split-Screen pour gameplay avec webcam (caméra en haut 1080x720 + gameplay en bas 1080x1200 + séparateur)
+    - Fullscreen Zoom pour chatting (avec PIP webcam si présent)
+    """
+    has_webcam = webcam_info.get("has_webcam", False)
+    bbox = webcam_info.get("bbox")
+    elements = []
+
+    if clip_type == "gameplay" and has_webcam and bbox:
+        bx1, by1, bx2, by2 = bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]
+        cx = (bx1 + bx2) / 2
+        cy = (by1 + by2) / 2
+        bw = max(bx2 - bx1, 1)
+
+        # Cadrage confortable autour du visage/buste
+        crop_w = max(bw * 1.8, 360)
+        crop_h = crop_w * (720 / 1080)
+        cx1 = max(0, int(cx - crop_w / 2))
+        cx2 = min(subclip.w, int(cx + crop_w / 2))
+        cy1 = max(0, int(cy - crop_h / 2))
+        cy2 = min(subclip.h, int(cy + crop_h / 2))
+
+        top_cam = (
+            subclip.crop(x1=cx1, y1=cy1, x2=cx2, y2=cy2)
+            .resize((RESOLUTION[0], 720))
+            .set_duration(duration)
+            .set_position((0, 0))
+        )
+        separator = (
+            ColorClip((RESOLUTION[0], 4), color=(20, 20, 20))
+            .set_duration(duration)
+            .set_position((0, 718))
+        )
+
+        # Gameplay zone en bas
+        target_aspect = 1080 / 1200
+        gw, gh = subclip.w, subclip.h
+        gameplay_crop_w = int(gh * target_aspect)
+        if gameplay_crop_w > gw:
+            gameplay_crop_w = gw
+        gx1 = (gw - gameplay_crop_w) // 2
+        gx2 = gx1 + gameplay_crop_w
+
+        bottom_game = (
+            subclip.crop(x1=gx1, y1=0, x2=gx2, y2=gh)
+            .resize((RESOLUTION[0], 1200))
+            .set_duration(duration)
+            .set_position((0, 720))
+        )
+        elements.extend([top_cam, bottom_game, separator])
+
+    else:
+        # Mode FULLSCREEN ZOOM centré (Just Chatting ou sans webcam)
+        gameplay_zone = _fullscreen_zoom(subclip)
+        KB_ZOOM_AMOUNT = 0.03
+
+        def _kb_pos(t):
+            zoom = 1.0 + KB_ZOOM_AMOUNT * (t / max(duration, 0.01))
+            offset_x = (zoom - 1.0) * RESOLUTION[0] / 2
+            offset_y = (zoom - 1.0) * RESOLUTION[1] / 2
+            return (-offset_x, -offset_y)
+
+        gameplay_clip = gameplay_zone.resize(
+            (int(gameplay_zone.w * (1.0 + KB_ZOOM_AMOUNT)),
+             int(gameplay_zone.h * (1.0 + KB_ZOOM_AMOUNT)))
+        )
+        gameplay_clip = gameplay_clip.set_position(
+            lambda t: _kb_pos(t)
+        ).set_duration(duration)
+        elements.append(gameplay_clip)
+
+        # PIP webcam en haut à gauche si présent en Just Chatting
+        if has_webcam and bbox:
+            x1, y1, x2, y2 = bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]
+            pip = subclip.crop(x1=x1, y1=y1, x2=x2, y2=y2)
+            pip_w = 220
+            pip_h = int(pip_w * (y2 - y1) / max(x2 - x1, 1))
+            pip = pip.resize((pip_w, pip_h)).set_duration(duration).set_position((20, 170))
+            pip_border = ColorClip((pip_w + 6, pip_h + 6), color=(255, 255, 255)).set_duration(duration).set_opacity(0.8).set_position((17, 167))
+            elements.extend([pip_border, pip])
+
+    return elements
+
+
 def edit_short(
     input_path,
     output_path,
@@ -367,14 +453,6 @@ def edit_short(
 ):
     """
     Monte le clip complet.
-
-    Args:
-        input_path: chemin du clip MP4 brut
-        output_path: chemin de sortie
-        clip_data: {"title", "broadcaster_name", "game_name", ...}
-        webcam_info: sortie de detect_webcam.detect_webcam()
-        subtitles: sortie de generate_subtitles.transcribe()
-        audio_analysis: sortie de analyze_audio.analyze_audio()
     """
     print("Début du montage unifié...")
 
@@ -383,6 +461,7 @@ def edit_short(
         clip_raw = clip_raw.subclip(0, max_duration)
     full_dur = clip_raw.duration
     peaks = audio_analysis.get("peaks", [])
+    clip_type = clip_data.get("clip_type", "gameplay")
 
     # ===================================================================
     # 1. Hook d'intro (teaser)
@@ -412,8 +491,10 @@ def edit_short(
     # Badge titre blanc arrondi (position fixe en haut dès 0s)
     hook_badge = _title_badge_clip(hook_title, hook.duration)
 
-    hook_full = _fullscreen_zoom(hook)
-    hook_elements = [hook_full]
+    # Layout avec WEBCAM visible dès les premières secondes (Split-screen ou PIP)
+    hook_bg = _create_background(hook.duration)
+    hook_layout = _build_layout_elements(hook, hook.duration, clip_type, webcam_info)
+    hook_elements = [hook_bg] + hook_layout
     if hook_badge is not None:
         hook_elements.append(hook_badge)
 
@@ -438,88 +519,7 @@ def edit_short(
     # ===================================================================
     # 3. Layout vidéo : Split-Screen (gameplay) ou Fullscreen Zoom (chatting)
     # ===================================================================
-    clip_type = clip_data.get("clip_type", "gameplay")
-    has_webcam = webcam_info.get("has_webcam", False)
-    bbox = webcam_info.get("bbox")
-
-    layout_elements = []
-
-    if clip_type == "gameplay" and has_webcam and bbox:
-        # Mode SPLIT-SCREEN :
-        # - Zone Haute (1080 x 720) : Caméra du streamer agrandie
-        # - Ligne de séparation (1080 x 4)
-        # - Zone Basse (1080 x 1200) : Gameplay centré sur l'action
-        bx1, by1, bx2, by2 = bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]
-        cx = (bx1 + bx2) / 2
-        cy = (by1 + by2) / 2
-        bw = max(bx2 - bx1, 1)
-
-        # Cadrage confortable autour du visage/buste
-        crop_w = max(bw * 1.8, 360)
-        crop_h = crop_w * (720 / 1080)
-        cx1 = max(0, int(cx - crop_w / 2))
-        cx2 = min(clip_raw.w, int(cx + crop_w / 2))
-        cy1 = max(0, int(cy - crop_h / 2))
-        cy2 = min(clip_raw.h, int(cy + crop_h / 2))
-
-        top_cam = (
-            clip_raw.crop(x1=cx1, y1=cy1, x2=cx2, y2=cy2)
-            .resize((RESOLUTION[0], 720))
-            .set_duration(full_dur)
-            .set_position((0, 0))
-        )
-        separator = (
-            ColorClip((RESOLUTION[0], 4), color=(20, 20, 20))
-            .set_duration(full_dur)
-            .set_position((0, 718))
-        )
-
-        # Gameplay zone en bas
-        target_aspect = 1080 / 1200
-        gw, gh = clip_raw.w, clip_raw.h
-        gameplay_crop_w = int(gh * target_aspect)
-        if gameplay_crop_w > gw:
-            gameplay_crop_w = gw
-        gx1 = (gw - gameplay_crop_w) // 2
-        gx2 = gx1 + gameplay_crop_w
-
-        bottom_game = (
-            clip_raw.crop(x1=gx1, y1=0, x2=gx2, y2=gh)
-            .resize((RESOLUTION[0], 1200))
-            .set_duration(full_dur)
-            .set_position((0, 720))
-        )
-        layout_elements.extend([top_cam, bottom_game, separator])
-
-    else:
-        # Mode FULLSCREEN ZOOM centré (Just Chatting ou sans webcam)
-        gameplay_zone = _fullscreen_zoom(clip_raw)
-        KB_ZOOM_AMOUNT = 0.03
-
-        def _kb_pos(t):
-            zoom = 1.0 + KB_ZOOM_AMOUNT * (t / max(full_dur, 0.01))
-            offset_x = (zoom - 1.0) * RESOLUTION[0] / 2
-            offset_y = (zoom - 1.0) * RESOLUTION[1] / 2
-            return (-offset_x, -offset_y)
-
-        gameplay_clip = gameplay_zone.resize(
-            (int(gameplay_zone.w * (1.0 + KB_ZOOM_AMOUNT)),
-             int(gameplay_zone.h * (1.0 + KB_ZOOM_AMOUNT)))
-        )
-        gameplay_clip = gameplay_clip.set_position(
-            lambda t: _kb_pos(t)
-        ).set_duration(full_dur)
-        layout_elements.append(gameplay_clip)
-
-        # PIP webcam en haut à gauche si présent en Just Chatting
-        if has_webcam and bbox:
-            x1, y1, x2, y2 = bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]
-            pip = clip_raw.crop(x1=x1, y1=y1, x2=x2, y2=y2)
-            pip_w = 220
-            pip_h = int(pip_w * (y2 - y1) / max(x2 - x1, 1))
-            pip = pip.resize((pip_w, pip_h)).set_duration(full_dur).set_position((20, 170))
-            pip_border = ColorClip((pip_w + 6, pip_h + 6), color=(255, 255, 255)).set_duration(full_dur).set_opacity(0.8).set_position((17, 167))
-            layout_elements.extend([pip_border, pip])
+    layout_elements = _build_layout_elements(clip_raw, full_dur, clip_type, webcam_info)
 
     # Composition de base
     base_elements = [bg] + layout_elements
