@@ -19,9 +19,11 @@ from moviepy.editor import (
     VideoFileClip,
     CompositeVideoClip,
     AudioFileClip,
+    CompositeAudioClip,
     TextClip,
     ColorClip,
     VideoClip,
+    ImageClip,
     concatenate_videoclips,
 )
 
@@ -31,8 +33,8 @@ from moviepy.editor import (
 RESOLUTION = (1080, 1920)  # 9:16
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "..", "assets")
 
-FONT_BOLD = os.path.join(ASSETS_DIR, "Roboto-Bold.ttf")
-FONT_REGULAR = os.path.join(ASSETS_DIR, "Roboto-Regular.ttf")
+FONT_BOLD = os.path.join(ASSETS_DIR, "OpenSans-Bold.ttf")
+FONT_REGULAR = os.path.join(ASSETS_DIR, "OpenSans-Regular.ttf")
 END_VIDEO = os.path.join(ASSETS_DIR, "fin_de_short.mp4")
 
 # Vérification des polices
@@ -64,37 +66,113 @@ def _text(text, font=FONT_BOLD, size=70, color="white",
         return TextClip(**kwargs)
 
 
-def _subtitle_clip(group, duration):
+def _render_karaoke_subtitle_image(
+    words_list,
+    active_idx=-1,
+    font_path=FONT_BOLD,
+    font_size=52,
+    active_color=(255, 230, 0, 255),    # Jaune fluo #FFE600
+    inactive_color=(255, 255, 255, 255), # Blanc pur
+    bg_color=(0, 0, 0, 160),             # Pilule noire semi-transparente
+    padding_x=32,
+    padding_y=16,
+    radius=18,
+):
     """
-    Sous-titre style TikTok : texte blanc sur fond semi-transparent.
-    Pas de stroke épais qui rend le texte fantôme.
+    Rend une image PIL représentant un groupe de sous-titres avec le mot
+    actif en surbrillance jaune fluo et les autres en blanc.
     """
-    text = group.get("text", "")
-    if not text.strip():
+    try:
+        font = ImageFont.truetype(font_path, font_size)
+    except Exception:
+        font = ImageFont.load_default()
+
+    word_texts = [
+        w["word"].upper() if isinstance(w, dict) else str(w).upper()
+        for w in words_list
+    ]
+    if not word_texts:
         return None
 
-    # Texte blanc pur, sans contour (le fond pill suffit pour la lisibilité)
-    tc = _text(
-        text,
-        font=FONT_BOLD,
-        size=56,
-        color="white",
-        stroke_color="white",
-        stroke_width=0,
+    space_w = font.getbbox(" ")[2] - font.getbbox(" ")[0]
+    word_widths = []
+    for wt in word_texts:
+        bbox = font.getbbox(wt)
+        word_widths.append(bbox[2] - bbox[0])
+
+    total_words_w = sum(word_widths) + (len(word_texts) - 1) * space_w
+    pill_w = max(240, min(1000, total_words_w + 2 * padding_x))
+    pill_h = font_size + 2 * padding_y + 4
+
+    img = Image.new("RGBA", (pill_w, pill_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Fond pilule arrondi
+    draw.rounded_rectangle(
+        [(0, 0), (pill_w, pill_h)],
+        radius=radius,
+        fill=bg_color,
     )
-    tc = tc.set_duration(duration)
 
-    # Fond pill : bande noire semi-transparente derrière le texte
-    bar_h = int(tc.h * 1.3) if tc.h else 76
-    bar = ColorClip((RESOLUTION[0], bar_h), color=(0, 0, 0))
-    bar = bar.set_duration(duration).set_opacity(0.45)
+    cur_x = (pill_w - total_words_w) // 2
+    for i, wt in enumerate(word_texts):
+        color = active_color if i == active_idx else inactive_color
+        bbox = font.getbbox(wt)
+        offset_y = bbox[1]
+        draw.text((cur_x, padding_y - offset_y), wt, font=font, fill=color)
+        cur_x += word_widths[i] + space_w
 
-    comp = CompositeVideoClip(
-        [bar.set_position(("center", 0)),
-         tc.set_position(("center", "center"))],
-        size=(RESOLUTION[0], bar_h),
-    ).set_duration(duration)
-    return comp
+    return img
+
+
+def _generate_karaoke_subtitle_clips(group, full_dur):
+    """
+    Génère les clips de sous-titres karaoké pour un groupe de mots.
+    Chaque mot prononcé est mis en surbrillance jaune en temps réel.
+    """
+    g_start = group.get("start", 0.0)
+    g_end = group.get("end", 0.0)
+    words = group.get("words", [])
+
+    if g_end <= g_start or g_start >= full_dur:
+        return []
+
+    g_end = min(g_end, full_dur)
+
+    # Si pas de liste de mots détaillée, fallback affichage blanc global
+    if not words:
+        raw_text = group.get("text", "")
+        if not raw_text.strip():
+            return []
+        img = _render_karaoke_subtitle_image([raw_text], active_idx=-1)
+        if img is None:
+            return []
+        arr = np.array(img)
+        dur = g_end - g_start
+        clip = ImageClip(arr[:, :, :3]).set_duration(dur)
+        mask = ImageClip(arr[:, :, 3] / 255.0, ismask=True).set_duration(dur)
+        return [clip.set_mask(mask).set_start(g_start).set_position(("center", 1150))]
+
+    clips = []
+    for i, w in enumerate(words):
+        w_start = max(g_start, w.get("start", g_start))
+        w_end = min(g_end, w.get("end", g_end))
+        if w_end <= w_start:
+            w_end = w_start + (g_end - g_start) / max(len(words), 1)
+
+        dur = w_end - w_start
+        if dur < 0.04 or w_start >= full_dur:
+            continue
+
+        img = _render_karaoke_subtitle_image(words, active_idx=i)
+        if img is None:
+            continue
+        arr = np.array(img)
+        clip = ImageClip(arr[:, :, :3]).set_duration(dur)
+        mask = ImageClip(arr[:, :, 3] / 255.0, ismask=True).set_duration(dur)
+        clips.append(clip.set_mask(mask).set_start(w_start).set_position(("center", 1150)))
+
+    return clips
 
 
 def _progress_bar(duration, target_w):
@@ -116,32 +194,112 @@ def _create_background(duration):
     return ColorClip(RESOLUTION, color=(12, 12, 12)).set_duration(duration)
 
 
-def _title_banner(duration, text):
+from PIL import Image, ImageDraw, ImageFont
+from moviepy.editor import ImageClip
+
+
+def _create_title_badge_image(
+    text,
+    max_width=920,
+    font_path=FONT_BOLD,
+    font_size=42,
+    bg_color=(255, 255, 255, 255),
+    text_color=(15, 15, 15, 255),
+    radius=26,
+    padding_x=40,
+    padding_y=24,
+    line_spacing=10,
+):
     """
-    Bandeau titre style TikTok : fond noir quasi-opaque + texte blanc large.
-    Renvoie un CompositeVideoClip centré en haut.
+    Génère l'encadré blanc à coins arrondis (badge TikTok) avec word-wrap
+    automatique et texte noir gras sans-serif centré. Ne coupe JAMAIS le texte.
     """
-    h = 140
-    # Fond noir quasi-opaque
-    bar = ColorClip((RESOLUTION[0], h), color=(0, 0, 0))
-    bar = bar.set_duration(duration).set_opacity(0.85)
+    try:
+        font = ImageFont.truetype(font_path, font_size)
+    except Exception:
+        font = ImageFont.load_default()
 
-    # Accent : fine ligne rouge en bas du bandeau
-    accent = ColorClip((RESOLUTION[0], 4), color=(229, 9, 20))
-    accent = accent.set_duration(duration)
+    words = text.strip().split()
+    if not words:
+        words = ["TITRE"]
 
-    # Texte blanc, plus gros, stroke fin
-    tc = _text(text, font=FONT_BOLD, size=52,
-               color="white", stroke_color="black", stroke_width=0.8)
-    tc = tc.set_duration(duration).set_position(("center", "center"))
+    usable_width = max_width - (2 * padding_x)
 
-    comp = CompositeVideoClip(
-        [bar.set_position((0, 0)),
-         accent.set_position((0, h - 4)),
-         tc.set_position(("center", "center"))],
-        size=(RESOLUTION[0], h),
-    ).set_duration(duration)
-    return comp.set_position((0, 0))
+    # Word wrap automatique
+    lines = []
+    current_line = []
+
+    for word in words:
+        test_line = " ".join(current_line + [word])
+        bbox = font.getbbox(test_line)
+        line_w = bbox[2] - bbox[0]
+
+        if line_w <= usable_width or not current_line:
+            current_line.append(word)
+        else:
+            lines.append(" ".join(current_line))
+            current_line = [word]
+
+    if current_line:
+        lines.append(" ".join(current_line))
+
+    # Mesures de chaque ligne
+    line_widths = []
+    line_heights = []
+    for line in lines:
+        bbox = font.getbbox(line)
+        line_widths.append(bbox[2] - bbox[0])
+        line_heights.append(font_size)
+
+    max_line_w = max(line_widths) if line_widths else 100
+    total_text_h = sum(line_heights) + (len(lines) - 1) * line_spacing
+
+    badge_w = min(max_width, max(380, max_line_w + 2 * padding_x))
+    badge_h = total_text_h + 2 * padding_y
+
+    img = Image.new("RGBA", (badge_w, badge_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Fond blanc arrondi (badge TikTok)
+    draw.rounded_rectangle(
+        [(0, 0), (badge_w, badge_h)],
+        radius=radius,
+        fill=bg_color,
+    )
+
+    # Rendu des lignes de texte centrées
+    current_y = padding_y
+    for i, line in enumerate(lines):
+        line_w = line_widths[i]
+        line_x = (badge_w - line_w) // 2
+        bbox = font.getbbox(line)
+        offset_y = bbox[1]
+        draw.text((line_x, current_y - offset_y), line, font=font, fill=text_color)
+        current_y += line_heights[i] + line_spacing
+
+    return img
+
+
+def _title_badge_clip(text, duration):
+    """
+    Crée un clip MoviePy transparent avec le badge titre blanc arrondi,
+    positionné de manière fixe en haut du frame.
+    """
+    if not text or not text.strip():
+        return None
+
+    img = _create_title_badge_image(text)
+    arr = np.array(img)
+
+    rgb = arr[:, :, :3]
+    alpha = arr[:, :, 3] / 255.0
+
+    clip = ImageClip(rgb).set_duration(duration)
+    mask = ImageClip(alpha, ismask=True).set_duration(duration)
+    clip = clip.set_mask(mask)
+
+    # Position fixe en haut du frame : centré horizontalement, marge haute Y=100px
+    return clip.set_position(("center", 100))
 
 
 def _generate_tts(text, max_duration):
@@ -233,42 +391,34 @@ def edit_short(
     hook_end = min(audio_analysis.get("hook_end", 3.0), full_dur)
     hook = clip_raw.subclip(hook_start, hook_end)
 
+    # Audio SFX Whoosh au tout début du clip (0s)
+    whoosh_path = os.path.join(ASSETS_DIR, "sfx_whoosh.wav")
+    if os.path.exists(whoosh_path) and hook.audio is not None:
+        try:
+            whoosh = AudioFileClip(whoosh_path).volumex(0.60)
+            if whoosh.duration > hook.duration:
+                whoosh = whoosh.subclip(0, hook.duration)
+            hook_audio = CompositeAudioClip([hook.audio, whoosh.set_start(0.0)])
+            hook = hook.set_audio(hook_audio)
+        except Exception as e:
+            print(f"⚠️  Erreur SFX hook : {e}")
+
     # Hook title: reuse the AI-generated overlay_title as hook text
     hook_title = clip_data.get("overlay_title", "")
     hook_title = "".join(c for c in hook_title if c.isprintable()).strip()
     if not hook_title or len(hook_title) < 3:
         hook_title = "BEST MOMENT"
 
-    # Fond pill opaque derrière le hook
-    hook_pill_h = 90
-    # Wider pill for longer titles
-    hook_pill_w = min(900, max(500, len(hook_title) * 18))
-    hook_pill = (
-        ColorClip((hook_pill_w, hook_pill_h), color=(0, 0, 0))
-        .set_duration(hook.duration)
-        .set_opacity(0.80)
-    )
-    # Accent rouge à gauche du pill
-    hook_accent = (
-        ColorClip((6, hook_pill_h), color=(229, 9, 20))
-        .set_duration(hook.duration)
-    )
-    hook_label = (
-        _text(hook_title, font=FONT_BOLD, size=42,
-              color="white", stroke_color="black", stroke_width=0.8)
-        .set_duration(hook.duration)
-        .set_position(("center", "center"))
-    )
-    hook_badge = CompositeVideoClip(
-        [hook_pill.set_position((0, 0)),
-         hook_accent.set_position((0, 0)),
-         hook_label.set_position(("center", "center"))],
-        size=(hook_pill_w, hook_pill_h),
-    ).set_duration(hook.duration)
+    # Badge titre blanc arrondi (position fixe en haut dès 0s)
+    hook_badge = _title_badge_clip(hook_title, hook.duration)
 
     hook_full = _fullscreen_zoom(hook)
+    hook_elements = [hook_full]
+    if hook_badge is not None:
+        hook_elements.append(hook_badge)
+
     hook_comp = CompositeVideoClip(
-        [hook_full, hook_badge.set_position(("center", 760))],
+        hook_elements,
         size=RESOLUTION,
     ).set_duration(hook.duration)
 
@@ -277,73 +427,104 @@ def edit_short(
     # ===================================================================
     bg = _create_background(full_dur)
 
-    # Titre overlay : généré par l'IA à partir de la transcription
+    # Titre overlay : même badge blanc en haut pour toute la vidéo
     overlay_title = clip_data.get("overlay_title", "")
-    # Nettoyer
     overlay_title = "".join(c for c in overlay_title if c.isprintable()).strip()
-    if len(overlay_title) > 42:
-        overlay_title = overlay_title[:39].strip() + "..."
 
-    title_banner = None
+    title_badge = None
     if overlay_title:
-        title_banner = _title_banner(full_dur, overlay_title)
+        title_badge = _title_badge_clip(overlay_title, full_dur)
 
     # ===================================================================
-    # 3. Gameplay fullscreen + webcam PIP
+    # 3. Layout vidéo : Split-Screen (gameplay) ou Fullscreen Zoom (chatting)
     # ===================================================================
+    clip_type = clip_data.get("clip_type", "gameplay")
     has_webcam = webcam_info.get("has_webcam", False)
+    bbox = webcam_info.get("bbox")
 
-    # Gameplay : toujours fullscreen zoom centré
-    gameplay_zone = _fullscreen_zoom(clip_raw)
+    layout_elements = []
 
-    # Ken Burns : zoom progressif léger
-    KB_ZOOM_AMOUNT = 0.03
+    if clip_type == "gameplay" and has_webcam and bbox:
+        # Mode SPLIT-SCREEN :
+        # - Zone Haute (1080 x 720) : Caméra du streamer agrandie
+        # - Ligne de séparation (1080 x 4)
+        # - Zone Basse (1080 x 1200) : Gameplay centré sur l'action
+        bx1, by1, bx2, by2 = bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]
+        cx = (bx1 + bx2) / 2
+        cy = (by1 + by2) / 2
+        bw = max(bx2 - bx1, 1)
 
-    def _kb_pos(t):
-        zoom = 1.0 + KB_ZOOM_AMOUNT * (t / max(full_dur, 0.01))
-        offset_x = (zoom - 1.0) * RESOLUTION[0] / 2
-        offset_y = (zoom - 1.0) * RESOLUTION[1] / 2
-        return (-offset_x, -offset_y)
+        # Cadrage confortable autour du visage/buste
+        crop_w = max(bw * 1.8, 360)
+        crop_h = crop_w * (720 / 1080)
+        cx1 = max(0, int(cx - crop_w / 2))
+        cx2 = min(clip_raw.w, int(cx + crop_w / 2))
+        cy1 = max(0, int(cy - crop_h / 2))
+        cy2 = min(clip_raw.h, int(cy + crop_h / 2))
 
-    gameplay_clip = gameplay_zone.resize(
-        (int(gameplay_zone.w * (1.0 + KB_ZOOM_AMOUNT)),
-         int(gameplay_zone.h * (1.0 + KB_ZOOM_AMOUNT)))
-    )
-    gameplay_clip = gameplay_clip.set_position(
-        lambda t: _kb_pos(t)
-    ).set_duration(full_dur)
+        top_cam = (
+            clip_raw.crop(x1=cx1, y1=cy1, x2=cx2, y2=cy2)
+            .resize((RESOLUTION[0], 720))
+            .set_duration(full_dur)
+            .set_position((0, 0))
+        )
+        separator = (
+            ColorClip((RESOLUTION[0], 4), color=(20, 20, 20))
+            .set_duration(full_dur)
+            .set_position((0, 718))
+        )
 
-    # PIP webcam : petit carré en haut à gauche (comme sur le clip Twitch originel).
-    pip_clip = None
-    pip_border = None
-    if has_webcam and webcam_info.get("bbox"):
-        bbox = webcam_info["bbox"]
-        x1, y1, x2, y2 = bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]
-        # Crop la zone webcam depuis le clip original
-        pip = clip_raw.crop(x1=x1, y1=y1, x2=x2, y2=y2)
-        # Taille cible : ~220px de large dans le coin haut-gauche
-        pip_w = 220
-        pip_h = int(pip_w * (y2 - y1) / max(x2 - x1, 1))
-        pip = pip.resize((pip_w, pip_h))
-        pip = pip.set_duration(full_dur)
-        pip = pip.set_position((20, 170))
-        # Bordure blanche fine autour du PIP
-        pip_border = ColorClip((pip_w + 6, pip_h + 6), color=(255, 255, 255))
-        pip_border = pip_border.set_duration(full_dur).set_opacity(0.8)
-        pip_border = pip_border.set_position((17, 167))
-        pip_clip = pip
+        # Gameplay zone en bas
+        target_aspect = 1080 / 1200
+        gw, gh = clip_raw.w, clip_raw.h
+        gameplay_crop_w = int(gh * target_aspect)
+        if gameplay_crop_w > gw:
+            gameplay_crop_w = gw
+        gx1 = (gw - gameplay_crop_w) // 2
+        gx2 = gx1 + gameplay_crop_w
+
+        bottom_game = (
+            clip_raw.crop(x1=gx1, y1=0, x2=gx2, y2=gh)
+            .resize((RESOLUTION[0], 1200))
+            .set_duration(full_dur)
+            .set_position((0, 720))
+        )
+        layout_elements.extend([top_cam, bottom_game, separator])
+
+    else:
+        # Mode FULLSCREEN ZOOM centré (Just Chatting ou sans webcam)
+        gameplay_zone = _fullscreen_zoom(clip_raw)
+        KB_ZOOM_AMOUNT = 0.03
+
+        def _kb_pos(t):
+            zoom = 1.0 + KB_ZOOM_AMOUNT * (t / max(full_dur, 0.01))
+            offset_x = (zoom - 1.0) * RESOLUTION[0] / 2
+            offset_y = (zoom - 1.0) * RESOLUTION[1] / 2
+            return (-offset_x, -offset_y)
+
+        gameplay_clip = gameplay_zone.resize(
+            (int(gameplay_zone.w * (1.0 + KB_ZOOM_AMOUNT)),
+             int(gameplay_zone.h * (1.0 + KB_ZOOM_AMOUNT)))
+        )
+        gameplay_clip = gameplay_clip.set_position(
+            lambda t: _kb_pos(t)
+        ).set_duration(full_dur)
+        layout_elements.append(gameplay_clip)
+
+        # PIP webcam en haut à gauche si présent en Just Chatting
+        if has_webcam and bbox:
+            x1, y1, x2, y2 = bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]
+            pip = clip_raw.crop(x1=x1, y1=y1, x2=x2, y2=y2)
+            pip_w = 220
+            pip_h = int(pip_w * (y2 - y1) / max(x2 - x1, 1))
+            pip = pip.resize((pip_w, pip_h)).set_duration(full_dur).set_position((20, 170))
+            pip_border = ColorClip((pip_w + 6, pip_h + 6), color=(255, 255, 255)).set_duration(full_dur).set_opacity(0.8).set_position((17, 167))
+            layout_elements.extend([pip_border, pip])
 
     # Composition de base
-    # NOTE: on n'ajoute PAS de nom de streamer ni de CTA :
-    # le clip Twitch brut contient déjà ces overlays.
-    # On garde uniquement le titre overlay (si généré) + barre de progression.
-    base_elements = [bg, gameplay_clip]
-    if title_banner is not None:
-        base_elements.append(title_banner)
-    if pip_border is not None:
-        base_elements.append(pip_border)
-    if pip_clip is not None:
-        base_elements.append(pip_clip)
+    base_elements = [bg] + layout_elements
+    if title_badge is not None:
+        base_elements.append(title_badge)
 
     # ===================================================================
     # 4. Flashs sur pics audio
@@ -356,20 +537,13 @@ def edit_short(
         base_elements.append(flash)
 
     # ===================================================================
-    # 5. Sous-titres (position basse pour éviter les overlays Twitch)
+    # 5. Sous-titres Karaoké mot par mot (surbrillance jaune TikTok)
     # ===================================================================
     subtitle_layers = []
     if subtitles:
         for group in subtitles:
-            start = group.get("start", 0.0)
-            end = group.get("end", 0.0)
-            dur = end - start
-            if dur < 0.1 or start >= full_dur:
-                continue
-            sc = _subtitle_clip(group, dur)
-            if sc is not None:
-                sc = sc.set_start(start).set_position(("center", 1350))
-                subtitle_layers.append(sc)
+            clips = _generate_karaoke_subtitle_clips(group, full_dur)
+            subtitle_layers.extend(clips)
 
     # ===================================================================
     # 6. Barre de progression (pas de CTA : déjà dans le clip Twitch)

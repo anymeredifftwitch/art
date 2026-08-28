@@ -11,12 +11,16 @@ from datetime import datetime
 import locale
 
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = "llama-3.1-70b-versatile"
+from dotenv import load_dotenv
 
-# Noms de streamer à supprimer des titres (insensible à la casse)
+load_dotenv()
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+# Noms de comptes/handles spécifiques à supprimer des titres (insensible à la casse)
 _STREAMER_BLACKLIST = [
-    "anyme023", "anyme", "anyme0233", "anymeoff",
+    "anyme023", "anyme0233", "anymeoff",
 ]
 
 
@@ -91,7 +95,7 @@ def generate_video_title(clip_data, subtitles=None):
 
     # Essayer Groq si configuré et si on a de la matière
     if GROQ_API_KEY and transcription_text:
-        title = _groq_video_title(game, transcription_text)
+        title = _groq_video_title(game, transcription_text, clip_title_raw=clip_data.get("title", ""))
         if title:
             return title
 
@@ -100,94 +104,117 @@ def generate_video_title(clip_data, subtitles=None):
                                   clip_data.get("title", ""))
 
 
-def _groq_video_title(game, transcription):
-    """Appelle Groq pour un titre overlay ultra-court et viral."""
+def _groq_video_title(game, transcription, clip_title_raw=""):
+    """Appelle Groq pour un titre overlay percutant et viral adapté à l'audience Twitch FR."""
     prompt = (
-        "Tu es un expert en titres viraux pour Shorts/TikTok. "
-        "À partir de la transcription audio d'un clip Twitch, "
-        "crée UN SEUL titre accrocheur à afficher EN HAUT de la vidéo.\n\n"
-        "Règles impératives :\n"
-        "- Style POV / storytelling / intrigue / drama / punchline\n"
-        "- Résume l'idée la plus virale du clip en une phrase choc\n"
-        "- Tu peux dramatiser ou inventer un contexte pour rendre ça viral\n"
-        "- MAXIMUM 38 caractères (sinon ça déborde à l'écran)\n"
-        "- TOUT EN MAJUSCULES\n"
-        "- AUCUN emoji, AUCUN hashtag, AUCUN nom de streamer\n"
-        "- Réponds UNIQUEMENT le titre, rien d'autre\n\n"
-        f"Jeu : {game or 'Inconnu'}\n"
+        "Tu es un expert d'élite en création de titres viraux pour Shorts YouTube et TikTok (audience Twitch FR / Gaming).\n"
+        "À partir du contexte et de la transcription audio d'un clip Twitch du streamer Anyme, crée UN SEUL titre overlay ultra-percutant à afficher en haut de la vidéo.\n\n"
+        "STYLE & TON EXIGÉS :\n"
+        "- Langage direct, familier, drôle, sans filtre, style commu Twitch FR / TikTok\n"
+        "- Formats types autorisés :\n"
+        "  1. 'POV: Anyme [action choc] en LIVE' (ex: POV: Anyme pète son crâne en LIVE)\n"
+        "  2. 'POV: IL [action choc]' (ex: POV: IL SE CHIE DESSUS DE PEUR)\n"
+        "  3. Phrase choc en MAJUSCULES (ex: IL A DIT QUOI LA ??? / LES VIEWERS SONT FOUS)\n"
+        "  4. 'Anyme [exploit/fail] et [punchline]' (ex: Anyme CLUTCH et se PISSE DESSUS / ANYME CLAQUE UN SMIC SUR CS2)\n"
+        "- Longueur : 20 à 42 caractères MAXIMUM (court pour tenir à l'écran)\n"
+        "- Emphase en MAJUSCULES sur les mots clés ou tout en majuscules\n"
+        "- AUCUN emoji, AUCUN hashtag\n"
+        "- Réponds UNIQUEMENT le titre, rien d'autre.\n\n"
+        "EXEMPLES DE TITRES PARFAITS :\n"
+        "- POV: Anyme pète son crâne en LIVE\n"
+        "- POV: Anyme raconte sa PIRE ANECDOTE en LIVE\n"
+        "- IL A DIT QUOI LA ???\n"
+        "- POV: Anyme FOU LE FEU EN LIVE\n"
+        "- LES VIEWERS SONT FOUS\n"
+        "- Anyme CLUTCH et se PISSE DESSUS\n"
+        "- POV: IL SE CHIE DESSUS DE PEUR\n"
+        "- ANYME CLAQUE UN SMIC SUR CS2\n"
+        "- POV ANYME DRAGUE UN TRANS EN LIVE\n"
+        "- POV: ANYME SE FAIL et PLEURE\n\n"
+        f"Jeu : {game or 'Just Chatting'}\n"
+        f"Titre Twitch original : << {clip_title_raw} >>\n"
         f"Transcription : << {transcription[:400]} >>"
     )
+
+    candidate_models = [GROQ_MODEL, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+    models_to_try = list(dict.fromkeys(candidate_models))
 
     try:
         from groq import Groq
         client = Groq(api_key=GROQ_API_KEY)
-        resp = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": "Tu réponds uniquement le titre, sans guillemets ni ponctuation superflue."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=1.0,
-            max_tokens=40,
-        )
-        title = resp.choices[0].message.content.strip().upper()
-        # Nettoyage
-        title = title.strip('"').strip("'").strip()
-        title = _clean_title(title)
-        if len(title) > 42:
-            title = title[:39].strip() + "..."
-        if not title:
-            return None
-        print(f"🎬 Titre overlay Groq : {title}")
-        return title
+
+        for m in models_to_try:
+            try:
+                resp = client.chat.completions.create(
+                    model=m,
+                    messages=[
+                        {"role": "system", "content": "Tu réponds uniquement le titre overlay court, sans guillemets ni blabla."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.9,
+                    max_tokens=80,
+                )
+                title = resp.choices[0].message.content.strip()
+                title = title.strip('"').strip("'").strip()
+                title = _clean_title(title)
+                if len(title) > 90:
+                    title = title[:87].strip() + "..."
+                if title:
+                    print(f"🎬 Titre overlay Groq ({m}) : {title}")
+                    return title
+            except Exception as e:
+                if "model_not_found" in str(e) or "does not exist" in str(e):
+                    continue
+                raise e
+
+        return None
 
     except Exception as exc:
-        print(f"⚠️  Groq titre overlay indisponible ({exc}), fallback.")
+        print(f"⚠️ Groq titre overlay indisponible ({exc}), fallback.")
         return None
 
 
 def _heuristic_video_title(transcription, clip_title_raw):
     """
     Fallback : génère un titre à partir de la transcription
-    avec des templates viraux.
+    avec les templates viraux calibrés sur le style Twitch FR d'Anyme.
     """
-    text = transcription.lower() if transcription else clip_title_raw.lower()
+    text = (transcription + " " + clip_title_raw).lower()
 
-    # Templates par mot-clé dans la transcription
+    # Templates par mot-clé avec frontières de mots pour éviter les faux-positifs
     templates = [
-        # (mots-clés, titre généré)
-        (["tromp", "ment", "trahi", "cach"], "POV: IL M'A TROMPÉ EN LIVE"),
-        (["peur", "flipp", "horreur", "jumpscare"], "LA PEUR DE SA VIE"),
-        (["pleur", "triste", "emotion"], "IL FOND EN LARMES"),
-        (["rage", "énerve", "tilt", "casse"], "IL PÈTE UN CÂBLE"),
-        (["rire", "mdr", "lol", "hilar"], "MORT DE RIRE EN DIRECT"),
-        (["clutch", "incroyable", "ouf", "wtf", "omg"], "UNE CLUTCH DE MALADE"),
-        (["fail", "raté", "nul"], "FAIL ÉPIQUE EN LIVE"),
-        (["gagn", "victoir", "win"], "IL A ENFIN GAGNÉ"),
-        (["perd", "defaite", "mort"], "DÉTRUIT EN DIRECT"),
-        (["chanter", "chanson", "musique"], "IL CHANTE EN LIVE"),
-        (["danse", "danser"], "IL SE LÂCHE SUR LE LIVE"),
+        ([r"police", r"flic", r"poursuite", r"prison"], "POV: Anyme FUIT LA POLICE EN LIVE"),
+        ([r"pack opening", r"crédit", r"animation", r"poubelle", r"scam"], "POV: Anyme SE FAIT SCAM EN LIVE"),
+        ([r"only up", r"montée", r"tuyau", r"désinstalle", r"tout en bas"], "POV: Anyme PÈTE SON CRÂNE SUR ONLY UP"),
+        ([r"mariage", r"bague", r"poème", r"discord"], "UN VIEWER LE DEMANDE EN MARIAGE"),
+        ([r"hardcore", r"creeper", r"supprimé", r"diamant"], "POV: IL PERD TOUT EN HARDCORE"),
+        ([r"carapace", r"mario kart", r"éclair", r"vol du siècle"], "LE PIRE VOL SUR MARIO KART"),
+        ([r"uber", r"livreur", r"burger", r"frite", r"sauce mayo"], "POV: LE LIVREUR UBER L'A ARNAQUÉ"),
+        ([r"vaisseau", r"lethal", r"porte", r"laissé", r"crever"], "SES POTES L'ABANDONNENT EN LIVE"),
+        ([r"beat saber", r"expert\+", r"mains", r"combo"], "Anyme DEVIENT UN MONSTRE EN LIVE"),
+        ([r"australie", r"capitale", r"géographie", r"quiz", r"sydney"], "POV: IL S'AFFICHE SUR UN QUIZ"),
+        ([r"peur", r"flipp", r"horreur", r"jumpscare", r"crise cardiaque"], "POV: IL SE CHIE DESSUS DE PEUR"),
+        ([r"smic", r"prix", r"skin", r"2000", r"cher", r"steam", r"cs2", r"cs:go"], "ANYME CLAQUE UN SMIC SUR CS2"),
+        ([r"clutch", r"one tap", r"l'as", r"\bace\b", r"patron", r"1v4", r"1v3", r"\bwin\b"], "Anyme CLUTCH et se PISSE DESSUS"),
+        ([r"anecdote", r"gênant", r"honte", r"histoire", r"métro"], "POV: Anyme raconte sa PIRE ANECDOTE en LIVE"),
+        ([r"feu", r"fumée", r"cramé", r"pc", r"setup", r"brûle"], "POV: Anyme FOU LE FEU EN LIVE"),
+        ([r"chat", r"monstre", r"troll", r"viewers", r"déteste"], "LES VIEWERS SONT FOUS"),
+        ([r"\bquoi\b", r"répète", r"malade mental", r"dit quoi"], "IL A DIT QUOI LA ???"),
+        ([r"crush", r"drague", r"bégayé", r"\btrans\b"], "POV ANYME DRAGUE UN TRANS EN LIVE"),
+        ([r"fail", r"raté", r"pad", r"vide", r"tombe", r"débutant", r"pleure"], "POV: ANYME SE FAIL et PLEURE"),
+        ([r"rage", r"énerve", r"tilt", r"crâne", r"casse", r"pète", r"câble", r"complot", r"écoute pas"], "POV: Anyme pète son crâne en LIVE"),
     ]
 
-    for keywords, title in templates:
-        if any(kw in text for kw in keywords):
-            return title[:42]
+    for patterns, title in templates:
+        for pat in patterns:
+            if re.search(pat, text, re.IGNORECASE):
+                return title
 
-    # Fallback : extrait intelligent des 6-8 premiers mots pertinents
+    # Fallback intelligent si mots spécifiques
     if transcription and len(transcription) > 5:
-        # Enlever les mots parasites (euh, bah, ouais, etc.)
-        filler = {"euh", "bah", "ben", "hein", "quoi", "du coup", "genre", "voilà",
-                   "oui", "ouais", "non", "yes", "ok", "okay"}
-        words = [w for w in transcription.split()
-                 if w.lower() not in filler and len(w) > 2][:6]
-        if words:
-            snippet = " ".join(words).upper()
-            if len(snippet) > 32:
-                snippet = snippet[:29].strip() + "..."
-            return snippet[:42]
+        return f"POV: Anyme en LIVE"
 
-    # Dernier recours
-    return "ANYME EN LIVE"[:42]
+    return "POV: Anyme en LIVE"
 
 
 # ---------------------------------------------------------------------------

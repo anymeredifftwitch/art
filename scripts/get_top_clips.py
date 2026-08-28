@@ -3,6 +3,16 @@ import os
 import sys
 import json
 from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
+
+if sys.platform.startswith("win"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+load_dotenv()
 
 CLIENT_ID     = os.getenv("TWITCH_CLIENT_ID")
 CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
@@ -86,6 +96,51 @@ def get_eligible_short_clips(access_token, num_clips_per_source=50, days_ago=1, 
     all_clips.sort(key=lambda x: x.get("viewer_count", 0), reverse=True)
     print(f"✅ Collecté {len(all_clips)} clips éligibles.")
     return all_clips
+
+
+def get_clips_by_ids(access_token, clip_ids):
+    """
+    Récupère les informations détaillées de clips Twitch spécifiques par leur ID ou URL.
+    """
+    cleaned_ids = []
+    for cid in clip_ids:
+        cid = str(cid).strip()
+        if not cid:
+            continue
+        if "/" in cid:
+            cid = cid.rstrip("/").split("/")[-1].split("?")[0]
+        cleaned_ids.append(cid)
+
+    if not cleaned_ids:
+        return []
+
+    headers = {
+        "Client-ID": CLIENT_ID,
+        "Authorization": f"Bearer {access_token}"
+    }
+    params = [("id", cid) for cid in cleaned_ids]
+    try:
+        resp = requests.get(TWITCH_API_URL, headers=headers, params=params)
+        resp.raise_for_status()
+        raw_data = resp.json().get("data", [])
+        results = []
+        for clip in raw_data:
+            duration = float(clip.get("duration", 0.0))
+            results.append({
+                "id": clip.get("id"),
+                "url": clip.get("url"),
+                "title": clip.get("title"),
+                "broadcaster_name": clip.get("broadcaster_name"),
+                "duration": duration,
+                "language": clip.get("language"),
+                "game_id": clip.get("game_id"),
+                "game_name": clip.get("game_name")
+            })
+        print(f"✅ Récupéré {len(results)} clip(s) spécifique(s).")
+        return results
+    except Exception as e:
+        print(f"⚠️  Erreur lors de la récupération des clips par ID : {e}")
+        return []
 
 if __name__ == "__main__":
     token = get_twitch_access_token()

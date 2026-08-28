@@ -78,7 +78,12 @@ def transcribe(video_path, model_size="medium", device="cpu", compute_type="int8
             text = " ".join(w["word"] for w in group)
             start = group[0]["start"]
             end = group[-1]["end"]
-            groups.append({"text": text, "start": start, "end": end})
+            groups.append({
+                "text": text,
+                "start": start,
+                "end": end,
+                "words": group,
+            })
 
         print(f"✅ Transcription OK — {len(words)} mots, {len(groups)} groupes")
         return groups

@@ -1,19 +1,37 @@
-name: Publish Daily YouTube Short
+name: Publish & Test YouTube Shorts
 
 on:
   workflow_dispatch:
     inputs:
-      privacy:
-        description: 'Visibilité du Short'
+      action_mode:
+        description: "Mode d'action"
         required: true
         type: choice
-        default: 'private'
+        default: 'artifact_only'
         options:
-          - private
-          - public
-          - unlisted
+          - artifact_only
+          - upload_private
+          - upload_unlisted
+          - upload_public
+      clip_selection:
+        description: 'Sélection des clips'
+        required: true
+        type: choice
+        default: 'auto'
+        options:
+          - auto
+          - gaming_webcam_1
+          - gaming_webcam_2
+          - chatting_webcam
+          - gaming_clutch
+          - custom
+      custom_clip_ids:
+        description: 'URL(s) ou ID(s) de clips personnalisés (si custom sélectionné, séparés par virgules)'
+        required: false
+        type: string
+        default: ''
       max_clips:
-        description: 'Nombre max de clips à publier'
+        description: 'Nombre max de clips à traiter'
         required: false
         type: number
         default: 1
@@ -21,7 +39,7 @@ on:
     - cron: '0 13 * * *'
 
 jobs:
-  publish-short:
+  process-short:
     runs-on: ubuntu-latest
 
     steps:
@@ -31,13 +49,13 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.10'
 
       - name: Cache Whisper model
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
-          key: whisper-tiny-${{ runner.os }}-v1
+          key: whisper-medium-${{ runner.os }}-v1
 
       - name: Install system dependencies (ffmpeg, ImageMagick)
         run: |
@@ -47,26 +65,63 @@ jobs:
       - name: Configure ImageMagick policy
         run: |
           POLICY_FILE="/etc/ImageMagick-6/policy.xml"
-          sudo cp $POLICY_FILE ${POLICY_FILE}.bak
-          sudo sed -i 's#<policy domain=".*" rights="none" pattern=".*"/>#<policy domain="coder" rights="read|write" pattern="*" />#g' $POLICY_FILE
+          if [ -f "$POLICY_FILE" ]; then
+            sudo cp $POLICY_FILE ${POLICY_FILE}.bak
+            sudo sed -i 's#<policy domain=".*" rights="none" pattern=".*"/>#<policy domain="coder" rights="read|write" pattern="*" />#g' $POLICY_FILE
+          fi
 
       - name: Install Python dependencies
         run: |
           pip install -r requirements.txt
 
-      # Création des fichiers de credentials pour YouTube
-      - name: Create client_secret.json
-        run: echo '${{ secrets.GOOGLE_CLIENT_SECRET_JSON }}' > client_secret.json
+      # Création des credentials YouTube si présents
+      - name: Setup YouTube credentials
+        run: |
+          if [ -n "${{ secrets.GOOGLE_CLIENT_SECRET_JSON }}" ]; then
+            echo '${{ secrets.GOOGLE_CLIENT_SECRET_JSON }}' > client_secret.json
+          fi
+          if [ -n "${{ secrets.YOUTUBE_API_TOKEN_JSON }}" ]; then
+            echo '${{ secrets.YOUTUBE_API_TOKEN_JSON }}' > token.json
+          fi
 
-      - name: Create token.json
-        run: echo '${{ secrets.YOUTUBE_API_TOKEN_JSON }}' > token.json
-
-      - name: Run main script
+      - name: Run Short Pipeline
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            python main.py --privacy public
+            python main.py --privacy public --max-clips 1
           else
-            python main.py --privacy ${{ github.event.inputs.privacy }} --max-clips ${{ github.event.inputs.max_clips }}
+            MODE="${{ github.event.inputs.action_mode }}"
+            PRESET="${{ github.event.inputs.clip_selection }}"
+            CUSTOM_IDS="${{ github.event.inputs.custom_clip_ids }}"
+            MAX_CLIPS="${{ github.event.inputs.max_clips }}"
+
+            EXTRA_ARGS=""
+
+            # Mode upload vs artefact
+            if [ "$MODE" = "artifact_only" ]; then
+              EXTRA_ARGS="$EXTRA_ARGS --no-upload"
+            elif [ "$MODE" = "upload_private" ]; then
+              EXTRA_ARGS="$EXTRA_ARGS --privacy private --keep-files"
+            elif [ "$MODE" = "upload_unlisted" ]; then
+              EXTRA_ARGS="$EXTRA_ARGS --privacy unlisted --keep-files"
+            elif [ "$MODE" = "upload_public" ]; then
+              EXTRA_ARGS="$EXTRA_ARGS --privacy public --keep-files"
+            fi
+
+            # Sélection des clips
+            if [ "$PRESET" = "custom" ] && [ -n "$CUSTOM_IDS" ]; then
+              EXTRA_ARGS="$EXTRA_ARGS --clip-ids $CUSTOM_IDS"
+            elif [ "$PRESET" = "gaming_webcam_1" ]; then
+              EXTRA_ARGS="$EXTRA_ARGS --clip-ids https://clips.twitch.tv/CautiousBrightPuffinCoolCat-w4K_BwQh4c9yE-y3"
+            elif [ "$PRESET" = "gaming_webcam_2" ]; then
+              EXTRA_ARGS="$EXTRA_ARGS --clip-ids https://clips.twitch.tv/SmoothAgileDaikonKappaPride-1g8H-0s8p6K9"
+            elif [ "$PRESET" = "chatting_webcam" ]; then
+              EXTRA_ARGS="$EXTRA_ARGS --clip-ids https://clips.twitch.tv/GentleBoldCaterpillarBrainSlug-1m9B-4k7_x9p"
+            elif [ "$PRESET" = "gaming_clutch" ]; then
+              EXTRA_ARGS="$EXTRA_ARGS --clip-ids https://clips.twitch.tv/BlushingTawnyDotterelFeelsBadMan-4n3k-9q1l"
+            fi
+
+            echo "Exécution de : python main.py --max-clips $MAX_CLIPS $EXTRA_ARGS"
+            python main.py --max-clips $MAX_CLIPS $EXTRA_ARGS
           fi
         env:
           TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
@@ -74,9 +129,11 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: client_secret.json
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
-      - name: Upload processed video
+      - name: Upload processed videos & previews as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: processed-short
-          path: data/*_processed.mp4
+          name: rendered-shorts
+          path: |
+            data/*_processed.mp4
+            data/*.png
           if-no-files-found: warn

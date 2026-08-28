@@ -13,6 +13,13 @@ import os
 import argparse
 from datetime import datetime, date
 
+if sys.platform.startswith("win"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 # Ajoute le dossier scripts au PYTHONPATH
 sys.path.append(os.path.join(os.path.dirname(__file__), 'scripts'))
 
@@ -78,31 +85,38 @@ def _add_to_history(history_data, clip_id, youtube_id):
     })
 
 
-# ---------------------------------------------------------------------------
-# Pipeline principal
-# ---------------------------------------------------------------------------
+# Mode d'upload / artifact
+NO_UPLOAD_MODE = False
+KEEP_FILES = False
 
-def main():
+
+def main(clip_ids_input=None, no_upload=False, keep_files=False):
     history = _load_published_history()
     already_published = _today_published_ids(history)
 
     # 1. Récupération des clips éligibles
     twitch_token = get_top_clips.get_twitch_access_token()
     if not twitch_token:
+        print("❌ Impossible d'obtenir le token Twitch.")
         return
 
-    eligible_clips = get_top_clips.get_eligible_short_clips(
-        access_token=twitch_token,
-        num_clips_per_source=50,
-        days_ago=1,
-        already_published_clip_ids=already_published,
-    )
+    if clip_ids_input:
+        raw_ids = [c.strip() for c in clip_ids_input.split(",") if c.strip()]
+        eligible_clips = get_top_clips.get_clips_by_ids(twitch_token, raw_ids)
+    else:
+        eligible_clips = get_top_clips.get_eligible_short_clips(
+            access_token=twitch_token,
+            num_clips_per_source=50,
+            days_ago=1,
+            already_published_clip_ids=already_published,
+        )
+
     if not eligible_clips:
-        print("Aucun clip eligible trouve.")
+        print("Aucun clip éligible trouvé.")
         return
 
     published_count = 0
-    attempted_ids = set(already_published)
+    attempted_ids = set(already_published) if not clip_ids_input else set()
 
     for clip in eligible_clips:
         if published_count >= NUMBER_OF_CLIPS_TO_ATTEMPT:
@@ -114,6 +128,7 @@ def main():
         attempted_ids.add(clip_id)
 
         print(f"\n--- Traitement du clip {clip_id} ---")
+        print(f"Titre original : {clip.get('title')!r}")
 
         # Chemins temporaires
         raw_path = os.path.join(DATA_DIR, f"{clip_id}_raw.mp4")
@@ -127,7 +142,8 @@ def main():
         # 3. Classification (gameplay vs chatting)
         print(f"game_name brut du clip : {clip.get('game_name')!r}")
         clip_type = classify_clip_type(clip)
-        print(f"Type de clip detecte : {clip_type}")
+        clip["clip_type"] = clip_type
+        print(f"Type de clip détecté : {clip_type}")
 
         # 4. Analyse audio (hook + pics)
         print("Analyse audio en cours...")
@@ -138,7 +154,7 @@ def main():
         subs = transcribe(raw_path)
 
         # 6. Détection webcam
-        print("Detection webcam en cours...")
+        print("Détection webcam en cours...")
         webcam = detect_webcam(raw_path, num_samples=10)
 
         # 6b. Titre overlay (Groq ou heuristique, basé sur la transcription)
@@ -146,7 +162,7 @@ def main():
         clip["overlay_title"] = overlay_title
 
         # 7. Montage unifié
-        print("Montage video en cours...")
+        print("Montage vidéo en cours...")
         edit_short(
             input_path=raw_path,
             output_path=processed_path,
@@ -164,18 +180,23 @@ def main():
 
         # 8. Métadonnées (réutilise le titre overlay généré avant)
         metadata = generate_metadata.generate_youtube_metadata(clip, overlay_title)
-        # Override privacy si demandé via la CLI
         if PRIVACY_MODE != "public":
             metadata["privacyStatus"] = PRIVACY_MODE
             print(f"Mode TEST : privacyStatus = {PRIVACY_MODE}")
 
-        # 9. Upload YouTube
+        # 9. Upload YouTube (ou sauvegarde artifact)
+        if no_upload:
+            print(f"💾 Mode ARTEFACT : Vidéo enregistrée dans {processed_path} (Upload ignoré)")
+            _cleanup(raw_path)
+            published_count += 1
+            continue
+
         try:
             yt_service = upload_youtube.get_authenticated_service()
             video_id = upload_youtube.upload_youtube_short(
                 yt_service, processed_path, metadata
             )
-            print(f"Short YouTube publie ! ID: {video_id}")
+            print(f"Short YouTube publié ! ID: {video_id}")
         except Exception as exc:
             print(f"Erreur lors de l'upload YouTube : {exc}")
             video_id = None
@@ -186,9 +207,12 @@ def main():
             published_count += 1
 
         # Nettoyage
-        _cleanup(raw_path, processed_path)
+        if keep_files:
+            _cleanup(raw_path)
+        else:
+            _cleanup(raw_path, processed_path)
 
-    print(f"\n{published_count} Short(s) traite(s) avec succes.")
+    print(f"\n{published_count} Short(s) traité(s) avec succès.")
 
 
 def _cleanup(*paths):
@@ -208,17 +232,39 @@ if __name__ == "__main__":
         "--privacy",
         choices=["public", "private", "unlisted"],
         default="public",
-        help="Visibilité du Short (defaut: public). Utiliser 'private' ou 'unlisted' pour un test.",
+        help="Visibilité du Short (défaut: public). Utiliser 'private' ou 'unlisted' pour un test.",
     )
     parser.add_argument(
         "--max-clips",
         type=int,
         default=NUMBER_OF_CLIPS_TO_ATTEMPT,
-        help=f"Nombre max de clips a publier (defaut: {NUMBER_OF_CLIPS_TO_ATTEMPT})",
+        help=f"Nombre max de clips à publier (défaut: {NUMBER_OF_CLIPS_TO_ATTEMPT})",
+    )
+    parser.add_argument(
+        "--clip-ids",
+        type=str,
+        default=None,
+        help="ID(s) ou URL(s) de clips Twitch spécifiques séparés par des virgules (ex: ClipID1,ClipID2).",
+    )
+    parser.add_argument(
+        "--no-upload",
+        action="store_true",
+        help="Génère uniquement les vidéos MP4 sans tenter d'upload YouTube (idéal pour tester en artefact).",
+    )
+    parser.add_argument(
+        "--keep-files",
+        action="store_true",
+        help="Conserve les vidéos MP4 générées dans le dossier data/ au lieu de les supprimer après upload.",
     )
     args = parser.parse_args()
 
     PRIVACY_MODE = args.privacy
     NUMBER_OF_CLIPS_TO_ATTEMPT = args.max_clips
+    NO_UPLOAD_MODE = args.no_upload
+    KEEP_FILES = args.keep_files
 
-    main()
+    main(
+        clip_ids_input=args.clip_ids,
+        no_upload=args.no_upload,
+        keep_files=args.keep_files,
+    )

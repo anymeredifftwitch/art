@@ -4,10 +4,13 @@ token.json
 *.json
 !published_shorts_history.json
 
-# Fichiers vidéo générés
+# Fichiers vidéo et rendus générés
 data/*.mp4
 data/*.m4a
 data/*.wav
+data/*.png
+*.log
+logs*.txt
 
 # Cache Python
 __pycache__/
