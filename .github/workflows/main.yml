@@ -87,7 +87,7 @@ jobs:
       - name: Run Short Pipeline
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            python main.py --privacy public --max-clips 1
+            python main.py --privacy public --max-clips 2
           else
             MODE="${{ github.event.inputs.action_mode }}"
             PRESET="${{ github.event.inputs.clip_selection }}"
