@@ -1,22 +1,22 @@
 # scripts/upload_youtube.py
 import os
+import sys
+import json
+import google.oauth2.credentials
 import google_auth_oauthlib.flow
 import google.auth.transport.requests
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
-import json
 
 # L'API scope nécessaire pour uploader des vidéos
 SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
 API_SERVICE_NAME = 'youtube'
 API_VERSION = 'v3'
 
-# Chemin vers le fichier client_secret.json que vous avez téléchargé depuis Google Cloud Console
-# Ce fichier NE DOIT PAS ÊTRE COMMITTÉ sur GitHub.
-# Pour GitHub Actions, nous utiliserons un secret pour stocker son contenu.
-CLIENT_SECRETS_FILE = 'client_secret.json' # Doit être au même niveau que le script ou un chemin défini.
-# Le fichier token.json sera créé après la première authentification réussie
+# Chemin vers le fichier client_secret.json
+CLIENT_SECRETS_FILE = 'client_secret.json'
+# Le fichier token.json
 TOKEN_FILE = 'token.json'
 
 def get_authenticated_service():
@@ -27,27 +27,33 @@ def get_authenticated_service():
     credentials = None
     # Charger les jetons d'accès existants s'ils sont disponibles
     if os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, 'r') as token:
+        try:
             credentials = google.oauth2.credentials.Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+        except Exception as e:
+            print(f"⚠️  Erreur lecture token.json : {e}")
 
     # Si les jetons ne sont pas valides ou n'existent pas, lancer le flux d'authentification
     if not credentials or not credentials.valid:
         if credentials and credentials.expired and credentials.refresh_token:
             print("🔑 Rafraîchissement du jeton d'accès YouTube...")
-            credentials.refresh(google.auth.transport.requests.Request())
-        else:
+            try:
+                credentials.refresh(google.auth.transport.requests.Request())
+            except Exception as e:
+                print(f"⚠️  Erreur rafraîchissement token YouTube : {e}")
+                credentials = None
+
+        if not credentials:
+            if not os.path.exists(CLIENT_SECRETS_FILE):
+                raise FileNotFoundError(f"Le fichier {CLIENT_SECRETS_FILE} ou {TOKEN_FILE} est requis pour l'upload YouTube.")
+
+            # Vérifier si l'environnement est interactif
+            if not sys.stdin.isatty():
+                raise RuntimeError("Environnement non-interactif (CI/Actions) : token.json manquant ou invalide.")
+
             print("🔑 Lancement du flux d'authentification YouTube...")
             flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
                 CLIENT_SECRETS_FILE, SCOPES)
-            flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob" # Pour les applications de bureau
-
-            # Utilise un mode sans navigateur pour GitHub Actions si possible,
-            # sinon, il faudra gérer le cas interactif localement.
-            # Pour GitHub Actions, le client_secret.json doit être 'web' et le redirect_uri doit correspondre.
-            # Ou, plus simple, utiliser un service account (mais non supporté pour les uploads directs)
-            # ou un jeton pre-généré via OAuth 2.0 pour TV/Devices (plus complexe à setup).
-            # Le plus simple pour GH Actions est de générer `token.json` localement une fois,
-            # et de le stocker comme un secret crypté dans GH Actions.
+            flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
             auth_url, _ = flow.authorization_url(prompt='consent')
             print(f"Veuillez ouvrir ce lien dans votre navigateur et autoriser l'application:\n{auth_url}")
             code = input("Entrez le code de vérification ici: ").strip()
@@ -55,9 +61,12 @@ def get_authenticated_service():
             credentials = flow.credentials
 
         # Sauvegarder les jetons pour les exécutions futures
-        with open(TOKEN_FILE, 'w') as token:
-            token.write(credentials.to_json())
-        print("✅ Jeton d'accès YouTube sauvegardé.")
+        try:
+            with open(TOKEN_FILE, 'w') as token:
+                token.write(credentials.to_json())
+            print("✅ Jeton d'accès YouTube sauvegardé.")
+        except Exception:
+            pass
 
     return build(API_SERVICE_NAME, API_VERSION, credentials=credentials)
 
@@ -78,31 +87,29 @@ def upload_youtube_short(youtube_service, video_path, metadata):
         print(f"❌ Erreur : Le fichier vidéo n'existe pas à {video_path}")
         return None
 
-    # Assurez-vous que les tags sont une liste et joignez-les en une seule chaîne
-    tags_list = metadata.get('tags', [])
-    if isinstance(tags_list, list):
-        # Nettoyer chaque tag (supprimer les espaces en début/fin) et filtrer les tags vides
-        processed_tags = [tag.strip() for tag in tags_list if tag.strip()]
-        tags_string = ", ".join(processed_tags)
+    # Assurez-vous que les tags sont une liste de chaînes
+    tags_raw = metadata.get('tags', [])
+    if isinstance(tags_raw, list):
+        processed_tags = [str(tag).strip() for tag in tags_raw if str(tag).strip()]
+    elif isinstance(tags_raw, str):
+        processed_tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
     else:
-        # Si pour une raison quelconque ce n'est pas une liste (ce qui ne devrait plus arriver),
-        # utilisez la valeur telle quelle.
-        tags_string = str(tags_list) # Convertir en string pour éviter d'autres erreurs
+        processed_tags = []
 
     body = {
         'snippet': {
-            'title': metadata['title'],
-            'description': metadata['description'],
-            'tags': tags_string, # CORRECTION ICI : Utilise la chaîne de tags
-            'categoryId': metadata['categoryId'],
-            'defaultLanguage': 'fr', # Ajout de la langue par défaut
-            'defaultAudioLanguage': 'fr' # Ajout de la langue audio par défaut
+            'title': metadata.get('title', 'Short Twitch'),
+            'description': metadata.get('description', ''),
+            'tags': processed_tags,
+            'categoryId': str(metadata.get('categoryId', '20')),
+            'defaultLanguage': 'fr',
+            'defaultAudioLanguage': 'fr'
         },
         'status': {
-            'privacyStatus': metadata['privacyStatus'],
-            'embeddable': metadata['embeddable'],
-            'license': metadata['license'],
-            'selfDeclaredMadeForKids': metadata['selfDeclaredMadeForKids']
+            'privacyStatus': metadata.get('privacyStatus', 'public'),
+            'embeddable': metadata.get('embeddable', True),
+            'license': metadata.get('license', 'youtube'),
+            'selfDeclaredMadeForKids': metadata.get('selfDeclaredMadeForKids', False)
         }
     }
 

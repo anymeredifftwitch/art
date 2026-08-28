@@ -110,14 +110,6 @@ jobs:
             # Sélection des clips
             if [ "$PRESET" = "custom" ] && [ -n "$CUSTOM_IDS" ]; then
               EXTRA_ARGS="$EXTRA_ARGS --clip-ids $CUSTOM_IDS"
-            elif [ "$PRESET" = "gaming_webcam_1" ]; then
-              EXTRA_ARGS="$EXTRA_ARGS --clip-ids https://clips.twitch.tv/CautiousBrightPuffinCoolCat-w4K_BwQh4c9yE-y3"
-            elif [ "$PRESET" = "gaming_webcam_2" ]; then
-              EXTRA_ARGS="$EXTRA_ARGS --clip-ids https://clips.twitch.tv/SmoothAgileDaikonKappaPride-1g8H-0s8p6K9"
-            elif [ "$PRESET" = "chatting_webcam" ]; then
-              EXTRA_ARGS="$EXTRA_ARGS --clip-ids https://clips.twitch.tv/GentleBoldCaterpillarBrainSlug-1m9B-4k7_x9p"
-            elif [ "$PRESET" = "gaming_clutch" ]; then
-              EXTRA_ARGS="$EXTRA_ARGS --clip-ids https://clips.twitch.tv/BlushingTawnyDotterelFeelsBadMan-4n3k-9q1l"
             fi
 
             echo "Exécution de : python main.py --max-clips $MAX_CLIPS $EXTRA_ARGS"

@@ -134,82 +134,87 @@ def main(clip_ids_input=None, no_upload=False, keep_files=False):
         raw_path = os.path.join(DATA_DIR, f"{clip_id}_raw.mp4")
         processed_path = os.path.join(DATA_DIR, f"{clip_id}_processed.mp4")
 
-        # 2. Téléchargement
-        if not download_clip.download_twitch_clip(clip['url'], raw_path):
-            _cleanup(raw_path, processed_path)
-            continue
-
-        # 3. Classification (gameplay vs chatting)
-        print(f"game_name brut du clip : {clip.get('game_name')!r}")
-        clip_type = classify_clip_type(clip)
-        clip["clip_type"] = clip_type
-        print(f"Type de clip détecté : {clip_type}")
-
-        # 4. Analyse audio (hook + pics)
-        print("Analyse audio en cours...")
-        audio = analyze_audio(raw_path, hook_duration=3.0)
-
-        # 5. Transcription (Whisper FR)
-        print("Transcription en cours...")
-        subs = transcribe(raw_path)
-
-        # 6. Détection webcam
-        print("Détection webcam en cours...")
-        webcam = detect_webcam(raw_path, num_samples=10)
-
-        # 6b. Titre overlay (Groq ou heuristique, basé sur la transcription)
-        overlay_title = generate_metadata.generate_video_title(clip, subs)
-        clip["overlay_title"] = overlay_title
-
-        # 7. Montage unifié
-        print("Montage vidéo en cours...")
-        edit_short(
-            input_path=raw_path,
-            output_path=processed_path,
-            clip_data=clip,
-            webcam_info=webcam,
-            subtitles=subs,
-            audio_analysis=audio,
-            max_duration=get_top_clips.MAX_VIDEO_DURATION_SECONDS,
-        )
-
-        if not os.path.exists(processed_path):
-            print("Le montage n'a pas produit de fichier de sortie.")
-            _cleanup(raw_path, processed_path)
-            continue
-
-        # 8. Métadonnées (réutilise le titre overlay généré avant)
-        metadata = generate_metadata.generate_youtube_metadata(clip, overlay_title)
-        if PRIVACY_MODE != "public":
-            metadata["privacyStatus"] = PRIVACY_MODE
-            print(f"Mode TEST : privacyStatus = {PRIVACY_MODE}")
-
-        # 9. Upload YouTube (ou sauvegarde artifact)
-        if no_upload:
-            print(f"💾 Mode ARTEFACT : Vidéo enregistrée dans {processed_path} (Upload ignoré)")
-            _cleanup(raw_path)
-            published_count += 1
-            continue
-
         try:
-            yt_service = upload_youtube.get_authenticated_service()
-            video_id = upload_youtube.upload_youtube_short(
-                yt_service, processed_path, metadata
+            # 2. Téléchargement
+            if not download_clip.download_twitch_clip(clip['url'], raw_path):
+                _cleanup(raw_path, processed_path)
+                continue
+
+            # 3. Classification (gameplay vs chatting)
+            print(f"game_name brut du clip : {clip.get('game_name')!r}")
+            clip_type = classify_clip_type(clip)
+            clip["clip_type"] = clip_type
+            print(f"Type de clip détecté : {clip_type}")
+
+            # 4. Analyse audio (hook + pics)
+            print("Analyse audio en cours...")
+            audio = analyze_audio(raw_path, hook_duration=3.0)
+
+            # 5. Transcription (Whisper FR)
+            print("Transcription en cours...")
+            subs = transcribe(raw_path)
+
+            # 6. Détection webcam
+            print("Détection webcam en cours...")
+            webcam = detect_webcam(raw_path, num_samples=10)
+
+            # 6b. Titre overlay (Groq ou heuristique, basé sur la transcription)
+            overlay_title = generate_metadata.generate_video_title(clip, subs)
+            clip["overlay_title"] = overlay_title
+
+            # 7. Montage unifié
+            print("Montage vidéo en cours...")
+            edit_short(
+                input_path=raw_path,
+                output_path=processed_path,
+                clip_data=clip,
+                webcam_info=webcam,
+                subtitles=subs,
+                audio_analysis=audio,
+                max_duration=get_top_clips.MAX_VIDEO_DURATION_SECONDS,
             )
-            print(f"Short YouTube publié ! ID: {video_id}")
-        except Exception as exc:
-            print(f"Erreur lors de l'upload YouTube : {exc}")
-            video_id = None
 
-        if video_id:
-            _add_to_history(history, clip_id, video_id)
-            _save_published_history(history)
-            published_count += 1
+            if not os.path.exists(processed_path):
+                print("Le montage n'a pas produit de fichier de sortie.")
+                _cleanup(raw_path, processed_path)
+                continue
 
-        # Nettoyage
-        if keep_files:
-            _cleanup(raw_path)
-        else:
+            # 8. Métadonnées (réutilise le titre overlay généré avant)
+            metadata = generate_metadata.generate_youtube_metadata(clip, overlay_title)
+            if PRIVACY_MODE != "public":
+                metadata["privacyStatus"] = PRIVACY_MODE
+                print(f"Mode TEST : privacyStatus = {PRIVACY_MODE}")
+
+            # 9. Upload YouTube (ou sauvegarde artifact)
+            if no_upload:
+                print(f"💾 Mode ARTEFACT : Vidéo enregistrée dans {processed_path} (Upload ignoré)")
+                _cleanup(raw_path)
+                published_count += 1
+                continue
+
+            try:
+                yt_service = upload_youtube.get_authenticated_service()
+                video_id = upload_youtube.upload_youtube_short(
+                    yt_service, processed_path, metadata
+                )
+                print(f"Short YouTube publié ! ID: {video_id}")
+            except Exception as exc:
+                print(f"Erreur lors de l'upload YouTube : {exc}")
+                video_id = None
+
+            if video_id:
+                _add_to_history(history, clip_id, video_id)
+                _save_published_history(history)
+                published_count += 1
+
+            # Nettoyage
+            if keep_files:
+                _cleanup(raw_path)
+            else:
+                _cleanup(raw_path, processed_path)
+
+        except Exception as err:
+            print(f"❌ Erreur inattendue lors du traitement du clip {clip_id} : {err}")
             _cleanup(raw_path, processed_path)
 
     print(f"\n{published_count} Short(s) traité(s) avec succès.")

@@ -568,12 +568,15 @@ def edit_short(
     end_clips = [hook_comp, corp]
 
     if os.path.exists(END_VIDEO):
-        outro = VideoFileClip(END_VIDEO).resize(RESOLUTION)
-        if outro.duration > 1.5:
-            outro = outro.subclip(0, 1.5)
-        end_clips.append(outro)
+        try:
+            outro = VideoFileClip(END_VIDEO).resize(RESOLUTION)
+            if outro.duration > 1.5:
+                outro = outro.subclip(0, 1.5)
+            end_clips.append(outro)
+        except Exception as e:
+            print(f"⚠️  Outro ignorée ({e})")
 
-    final = concatenate_videoclips(end_clips)
+    final = concatenate_videoclips(end_clips, method="compose")
 
     # ===================================================================
     # 9. Écriture
