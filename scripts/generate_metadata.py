@@ -18,7 +18,7 @@ except ImportError:
     pass
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "groq/compound")
 
 # Noms de comptes/handles spécifiques à supprimer des titres (insensible à la casse)
 _STREAMER_BLACKLIST = [
@@ -28,10 +28,14 @@ _STREAMER_BLACKLIST = [
 
 def _clean_title(title):
     """
-    Nettoie un titre généré par IA : supprime les emojis, noms de streamer,
+    Nettoie un titre généré par IA : supprime les balises <think>, emojis, noms de streamer,
     hashtags, et artefacts résiduels.
     """
     import unicodedata
+
+    # 0. Supprimer les balises de raisonnement (<think>...</think>)
+    title = re.sub(r"<think>.*?</think>", "", title, flags=re.DOTALL | re.IGNORECASE)
+    title = re.sub(r"</?think>", "", title, flags=re.IGNORECASE)
 
     # 1. Supprimer les emojis (Unicode ranges + séquences)
     emoji_pattern = re.compile(
@@ -114,25 +118,20 @@ def _get_groq_candidate_models(client=None, preferred_model=None):
     preferred = [
         preferred_model,
         GROQ_MODEL,
-        # 1. Modèles Llama 3.3 / 3.1 haute performance
+        # 1. Modèles de chat validés produisant du texte riche en français
+        "groq/compound",
+        "qwen/qwen3.8-27b",
+        "groq/compound-mini",
+        "qwen/qwen3.6-27b",
+        "allam-2-7b",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        # 2. Modèles de secours supplémentaires si réactivés
         "llama-3.3-70b-versatile",
-        "llama-3.3-70b-specdec",
         "llama-3.1-8b-instant",
-        # 2. Modèles DeepSeek
         "deepseek-r1-distill-llama-70b",
         "deepseek-r1-distill-qwen-32b",
-        # 3. Modèles Qwen
-        "qwen-2.5-32b",
-        "qwen-2.5-coder-32b",
-        # 4. Modèles Google Gemma
         "gemma2-9b-it",
-        # 5. Modèles Llama 3.2
-        "llama-3.2-11b-vision-preview",
-        "llama-3.2-3b-preview",
-        "llama-3.2-1b-preview",
-        # 6. Modèles Llama 3 legacy
-        "llama3-70b-8192",
-        "llama3-8b-8192",
     ]
     models = [m for m in preferred if m]
 
@@ -154,6 +153,7 @@ def _get_groq_candidate_models(client=None, preferred_model=None):
 
 def _groq_video_title(game, transcription, clip_title_raw=""):
     """Appelle Groq pour un titre overlay percutant et viral adapté à l'audience Twitch FR."""
+    import time
     prompt = (
         "Tu es un expert d'élite en création de titres viraux pour Shorts YouTube et TikTok (audience Twitch FR / Gaming).\n"
         "À partir du contexte et de la transcription audio d'un clip Twitch du streamer Anyme, crée UN SEUL titre overlay ultra-percutant à afficher en haut de la vidéo.\n\n"
@@ -190,27 +190,35 @@ def _groq_video_title(game, transcription, clip_title_raw=""):
         models_to_try = _get_groq_candidate_models(client=client)
 
         for m in models_to_try:
-            try:
-                resp = client.chat.completions.create(
-                    model=m,
-                    messages=[
-                        {"role": "system", "content": "Tu réponds uniquement le titre overlay court, sans guillemets ni blabla."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.9,
-                    max_tokens=80,
-                )
-                title = resp.choices[0].message.content.strip()
-                title = title.strip('"').strip("'").strip()
-                title = _clean_title(title)
-                if len(title) > 90:
-                    title = title[:87].strip() + "..."
-                if title:
-                    print(f"🎬 Titre overlay Groq ({m}) : {title}")
-                    return title
-            except Exception as e:
-                print(f"⚠️ Modèle Groq '{m}' indisponible ({e}), essai du modèle suivant...")
-                continue
+            for attempt in range(2):
+                try:
+                    resp = client.chat.completions.create(
+                        model=m,
+                        messages=[
+                            {"role": "system", "content": "Tu réponds uniquement le titre overlay court, sans guillemets ni blabla."},
+                            {"role": "user", "content": prompt},
+                        ],
+                        temperature=0.9,
+                        max_tokens=80,
+                    )
+                    title = resp.choices[0].message.content.strip()
+                    title = title.strip('"').strip("'").strip()
+                    title = _clean_title(title)
+                    if len(title) > 90:
+                        title = title[:87].strip() + "..."
+                    if title and len(title) >= 3:
+                        print(f"🎬 Titre overlay Groq ({m}) : {title}")
+                        return title
+                    # Si réponse vide, passer au modèle suivant
+                    break
+                except Exception as e:
+                    err_str = str(e)
+                    if "429" in err_str or "rate_limit" in err_str:
+                        if attempt == 0:
+                            time.sleep(1.5)
+                            continue
+                    print(f"⚠️ Modèle Groq '{m}' indisponible ({e}), essai du modèle suivant...")
+                    break
 
         return None
 
@@ -294,33 +302,41 @@ def _groq_title_hashtags(clip_data):
         models_to_try = _get_groq_candidate_models(client=client)
 
         for m in models_to_try:
-            try:
-                resp = client.chat.completions.create(
-                    model=m,
-                    messages=[
-                        {"role": "system", "content": "Tu reponds strictement dans le format demande."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.9,
-                    max_tokens=200,
-                )
-                content = resp.choices[0].message.content.strip()
+            for attempt in range(2):
+                try:
+                    resp = client.chat.completions.create(
+                        model=m,
+                        messages=[
+                            {"role": "system", "content": "Tu reponds strictement dans le format demande."},
+                            {"role": "user", "content": prompt},
+                        ],
+                        temperature=0.9,
+                        max_tokens=200,
+                    )
+                    content = resp.choices[0].message.content.strip()
 
-                title_match = re.search(r"TITRE:\s*(.+?)(?:\n|$)", content)
-                hashtags_match = re.search(r"HASHTAGS:\s*(.+?)(?:\n|$)", content)
+                    title_match = re.search(r"TITRE:\s*(.+?)(?:\n|$)", content)
+                    hashtags_match = re.search(r"HASHTAGS:\s*(.+?)(?:\n|$)", content)
 
-                title = (title_match.group(1).strip() if title_match else title_raw)[:100]
-                title = _clean_title(title)
-                hashtags_raw = hashtags_match.group(1).strip() if hashtags_match else ""
-                hashtags = [t.strip() for t in hashtags_raw.split() if t.startswith("#")]
+                    title = (title_match.group(1).strip() if title_match else title_raw)[:100]
+                    title = _clean_title(title)
+                    hashtags_raw = hashtags_match.group(1).strip() if hashtags_match else ""
+                    hashtags = [t.strip() for t in hashtags_raw.split() if t.startswith("#")]
 
-                if title:
-                    print(f"Groq ({m}) => titre: {title}")
-                    print(f"Groq ({m}) => hashtags: {hashtags}")
-                    return title, hashtags
-            except Exception as e:
-                print(f"⚠️ Modèle Groq '{m}' indisponible ({e}), essai du modèle suivant...")
-                continue
+                    if title and len(title) >= 3:
+                        print(f"Groq ({m}) => titre: {title}")
+                        print(f"Groq ({m}) => hashtags: {hashtags}")
+                        return title, hashtags
+                    break
+                except Exception as e:
+                    err_str = str(e)
+                    if "429" in err_str or "rate_limit" in err_str:
+                        if attempt == 0:
+                            import time
+                            time.sleep(1.5)
+                            continue
+                    print(f"⚠️ Modèle Groq '{m}' indisponible ({e}), essai du modèle suivant...")
+                    break
 
         return None, None
 
