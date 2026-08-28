@@ -2,6 +2,15 @@ import requests
 import os
 import sys
 import json
+from datetime import datetime, timedelta, timezone
+
+if sys.platform.startswith("win"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
