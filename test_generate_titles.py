@@ -124,6 +124,51 @@ DEFAULT_BENCHMARK_CLIPS = [
 ]
 
 
+def _get_groq_candidate_models(client=None, preferred_model=None):
+    """
+    Construit une liste ordonnée et exhaustive de modèles Groq à tester en cascade.
+    Interroge également l'API Groq pour inclure dynamiquement tous les modèles de chat disponibles.
+    """
+    preferred = [
+        preferred_model,
+        # 1. Modèles Llama 3.3 / 3.1 haute performance
+        "llama-3.3-70b-versatile",
+        "llama-3.3-70b-specdec",
+        "llama-3.1-8b-instant",
+        # 2. Modèles DeepSeek
+        "deepseek-r1-distill-llama-70b",
+        "deepseek-r1-distill-qwen-32b",
+        # 3. Modèles Qwen
+        "qwen-2.5-32b",
+        "qwen-2.5-coder-32b",
+        # 4. Modèles Google Gemma
+        "gemma2-9b-it",
+        # 5. Modèles Llama 3.2
+        "llama-3.2-11b-vision-preview",
+        "llama-3.2-3b-preview",
+        "llama-3.2-1b-preview",
+        # 6. Modèles Llama 3 legacy
+        "llama3-70b-8192",
+        "llama3-8b-8192",
+    ]
+    models = [m for m in preferred if m]
+
+    if client:
+        try:
+            available = client.models.list()
+            # Filtrer les modèles spécialisés non-chat
+            exclude_keywords = ["whisper", "embed", "tts", "guard", "audio"]
+            for item in available.data:
+                mid = getattr(item, "id", "")
+                if mid and not any(k in mid.lower() for k in exclude_keywords):
+                    if mid not in models:
+                        models.append(mid)
+        except Exception:
+            pass
+
+    return list(dict.fromkeys(models))
+
+
 def call_groq_completion(prompt, api_key, model="llama-3.3-70b-versatile", temperature=0.9, max_tokens=250):
     """Effectue un appel direct à Groq avec gestion des modèles de secours."""
     try:
@@ -133,9 +178,7 @@ def call_groq_completion(prompt, api_key, model="llama-3.3-70b-versatile", tempe
         return None
 
     client = Groq(api_key=api_key)
-    candidate_models = [model, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
-    # Éliminer les doublons tout en gardant l'ordre
-    models_to_try = list(dict.fromkeys(candidate_models))
+    models_to_try = _get_groq_candidate_models(client=client, preferred_model=model)
 
     for m in models_to_try:
         try:
