@@ -138,7 +138,7 @@ def _groq_video_title(game, transcription, clip_title_raw=""):
         f"Transcription : << {transcription[:400]} >>"
     )
 
-    candidate_models = [GROQ_MODEL, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+    candidate_models = [GROQ_MODEL, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
     models_to_try = list(dict.fromkeys(candidate_models))
 
     try:
@@ -165,9 +165,8 @@ def _groq_video_title(game, transcription, clip_title_raw=""):
                     print(f"🎬 Titre overlay Groq ({m}) : {title}")
                     return title
             except Exception as e:
-                if "model_not_found" in str(e) or "does not exist" in str(e):
-                    continue
-                raise e
+                print(f"⚠️ Modèle Groq '{m}' indisponible ({e}), essai du modèle suivant...")
+                continue
 
         return None
 
@@ -244,32 +243,44 @@ def _groq_title_hashtags(clip_data):
         "2 pertinents au contenu du clip\n"
     )
 
+    candidate_models = [GROQ_MODEL, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
+    models_to_try = list(dict.fromkeys(candidate_models))
+
     try:
         from groq import Groq
 
         client = Groq(api_key=GROQ_API_KEY)
-        resp = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": "Tu reponds strictement dans le format demande."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.9,
-            max_tokens=200,
-        )
-        content = resp.choices[0].message.content.strip()
 
-        title_match = re.search(r"TITRE:\s*(.+?)(?:\n|$)", content)
-        hashtags_match = re.search(r"HASHTAGS:\s*(.+?)(?:\n|$)", content)
+        for m in models_to_try:
+            try:
+                resp = client.chat.completions.create(
+                    model=m,
+                    messages=[
+                        {"role": "system", "content": "Tu reponds strictement dans le format demande."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.9,
+                    max_tokens=200,
+                )
+                content = resp.choices[0].message.content.strip()
 
-        title = (title_match.group(1).strip() if title_match else title_raw)[:100]
-        title = _clean_title(title)
-        hashtags_raw = hashtags_match.group(1).strip() if hashtags_match else ""
-        hashtags = [t.strip() for t in hashtags_raw.split() if t.startswith("#")]
+                title_match = re.search(r"TITRE:\s*(.+?)(?:\n|$)", content)
+                hashtags_match = re.search(r"HASHTAGS:\s*(.+?)(?:\n|$)", content)
 
-        print(f"Groq => titre: {title}")
-        print(f"Groq => hashtags: {hashtags}")
-        return title, hashtags
+                title = (title_match.group(1).strip() if title_match else title_raw)[:100]
+                title = _clean_title(title)
+                hashtags_raw = hashtags_match.group(1).strip() if hashtags_match else ""
+                hashtags = [t.strip() for t in hashtags_raw.split() if t.startswith("#")]
+
+                if title:
+                    print(f"Groq ({m}) => titre: {title}")
+                    print(f"Groq ({m}) => hashtags: {hashtags}")
+                    return title, hashtags
+            except Exception as e:
+                print(f"⚠️ Modèle Groq '{m}' indisponible ({e}), essai du modèle suivant...")
+                continue
+
+        return None, None
 
     except Exception as exc:
         print(f"API Groq indisponible ({exc}), fallback heuristique.")

@@ -133,7 +133,7 @@ def call_groq_completion(prompt, api_key, model="llama-3.3-70b-versatile", tempe
         return None
 
     client = Groq(api_key=api_key)
-    candidate_models = [model, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+    candidate_models = [model, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
     # Éliminer les doublons tout en gardant l'ordre
     models_to_try = list(dict.fromkeys(candidate_models))
 
@@ -150,12 +150,8 @@ def call_groq_completion(prompt, api_key, model="llama-3.3-70b-versatile", tempe
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:
-            err_str = str(e)
-            if "model_not_found" in err_str or "does not exist" in err_str:
-                continue
-            else:
-                print(f"⚠️ Erreur Groq ({m}) : {e}")
-                return None
+            print(f"⚠️ Modèle Groq '{m}' indisponible ({e}), essai du modèle suivant...")
+            continue
     return None
 
 
