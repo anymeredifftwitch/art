@@ -44,7 +44,7 @@ def fetch_clips(access_token, params):
     resp.raise_for_status()
     return resp.json().get("data", [])
 
-def get_eligible_short_clips(access_token, num_clips_per_source=50, days_ago=1, already_published_clip_ids=None):
+def get_eligible_short_clips(access_token, num_clips_per_source=50, days_ago=90, already_published_clip_ids=None):
     if already_published_clip_ids is None:
         already_published_clip_ids = []
 
@@ -53,28 +53,31 @@ def get_eligible_short_clips(access_token, num_clips_per_source=50, days_ago=1, 
     seen       = set(already_published_clip_ids)
     all_clips  = []
 
-    print(f"📊 Récupération des clips pour Anyme023...")
+    print(f"📊 Récupération des meilleurs clips pour Anyme023 (derniers {days_ago} jours)...")
     params = {
         "first": num_clips_per_source,
         "started_at": start_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
         "ended_at": end_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
-        "sort": "views",
         "broadcaster_id": TARGET_BROADCASTER_ID,
-        "language": CLIP_LANGUAGE
     }
     clips = fetch_clips(access_token, params)
+
+    # Si aucun clip trouvé sur la période, chercher les top clips de tous les temps
+    if not clips:
+        print("ℹ️  Aucun clip récent trouvé, recherche des top clips globaux...")
+        params_all = {
+            "first": num_clips_per_source,
+            "broadcaster_id": TARGET_BROADCASTER_ID,
+        }
+        clips = fetch_clips(access_token, params_all)
+
     for clip in clips:
-        # debug rapide
-        print(f"  ➡️ Clip récupéré ID={clip.get('id')} game_id={clip.get('game_id')} game_name={clip.get('game_name')}")
-        if clip["id"] in seen:
-            continue
-        if clip.get("language") != CLIP_LANGUAGE:
+        if clip.get("id") in seen:
             continue
         duration = float(clip.get("duration", 0.0))
         if not (MIN_VIDEO_DURATION_SECONDS <= duration <= MAX_VIDEO_DURATION_SECONDS):
             continue
 
-        # Conserver TOUS les champs, y compris game_id
         all_clips.append({
             "id": clip.get("id"),
             "url": clip.get("url"),
@@ -83,12 +86,13 @@ def get_eligible_short_clips(access_token, num_clips_per_source=50, days_ago=1, 
             "duration": duration,
             "language": clip.get("language"),
             "game_id": clip.get("game_id"),
-            "game_name": clip.get("game_name")
+            "game_name": clip.get("game_name"),
+            "view_count": clip.get("view_count", 0),
         })
         seen.add(clip["id"])
 
-    all_clips.sort(key=lambda x: x.get("viewer_count", 0), reverse=True)
-    print(f"✅ Collecté {len(all_clips)} clips éligibles.")
+    all_clips.sort(key=lambda x: x.get("view_count", 0), reverse=True)
+    print(f"✅ Collecté {len(all_clips)} clip(s) éligible(s).")
     return all_clips
 
 
