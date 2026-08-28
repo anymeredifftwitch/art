@@ -1,7 +1,7 @@
 # 🎬 Rapport de Test de Génération de Titres (Groq IA)
 
-- **Date** : 2026-08-28 16:34:24
-- **Modèle** : `llama-3.3-70b-versatile`
+- **Date** : 2026-08-28 19:42:38
+- **Modèle** : `groq/compound`
 - **Nombre de clips testés** : 10
 
 ---
@@ -10,9 +10,13 @@
 - 🔗 **Lien Twitch** : https://www.twitch.tv/anyme023/clip/LaconicIronicAsparagusStinkyCheese-rBu1RqmHGKynrUyv
 - 🎮 **Jeu / Catégorie** : GTA V
 - 🗣️ **Contexte audio** : *"Accélère, tourne à droite dans la ruelle ! Y'a 5 voitures de flics derrière nous, si on se fait choper c'est direct 10 ans de prison fédérale !"*
-- 🔴 **Titre YouTube Shorts généré** : **`Anyme | Course poursuite de 45 minutes avec la police`**
-- 📺 **Titre Overlay Vidéo (Haut)** : `POV: Anyme FUIT LA POLICE EN LIVE`
-- 🏷️ **Hashtags** : `#anyme023 #avec #course #gaming #gtav #minutes #poursuite #shorts #twitchfr`
+- 🔴 **Titre YouTube Shorts généré** : **`Anyme | 45 MINUTES DE COURSE POURSUITE AVEC 5 FLICS EN LIVE`**
+- 📺 **Titre Overlay Vidéo (Haut)** : `POV: FUIT LA POLICE`
+- 💡 **Variantes de titres proposées** :
+  - `Anyme | 45 MINUTES DE COURSE POURSUITE AVEC 5 FLICS EN LIVE`
+  - `Anyme | 10 ANS DE PRISON EN JEU, ON SE FAIT CHOPER`
+  - `Anyme | POV: JE DRIFTE DANS LA RUELLE AVEC 5 FLICS`
+- 🏷️ **Hashtags** : `#Anyme #TwitchFR #GTA5 #CoursePoursuite #GamingFR`
 
 ---
 
@@ -20,9 +24,13 @@
 - 🔗 **Lien Twitch** : https://www.twitch.tv/anyme023/clip/RespectfulDreamyGarageOSfrog-ykxWE3DUTmLShF6O
 - 🎮 **Jeu / Catégorie** : EA Sports FC 25
 - 🗣️ **Contexte audio** : *"Allez s'il te plaît une animation... France... BU... MAIS NON C'EST ENCORE UN 82 GÉNÉRAL ! J'ai jeté 100 balles à la poubelle !"*
-- 🔴 **Titre YouTube Shorts généré** : **`Anyme | Pack opening des 500k crédits, la déception totale`**
-- 📺 **Titre Overlay Vidéo (Haut)** : `POV: Anyme SE FAIT SCAM EN LIVE`
-- 🏷️ **Hashtags** : `#500k #anyme023 #crédits #easportsfc25 #gaming #opening #pack #shorts #twitchfr`
+- 🔴 **Titre YouTube Shorts généré** : **`Anyme | Pack opening 500k crédits : J'AI JETÉ 100 BALLES À LA POUBELLE`**
+- 📺 **Titre Overlay Vidéo (Haut)** : `J'AI JETÉ 100 BALLES À LA POUBELLE`
+- 💡 **Variantes de titres proposées** :
+  - `Anyme | Pack opening 500k crédits : J'AI JETÉ 100 BALLES À LA POUBELLE`
+  - `Anyme | DESTRUCTION : 100 BALLES PERDUES EN LIVE`
+  - `Anyme | POV: IL DÉCOUVRE UN 82 GÉNÉRAL EN LIVE`
+- 🏷️ **Hashtags** : `#Anyme #TwitchFR #EASportsFC25 #Gaming #PackOpening`
 
 ---
 
@@ -30,9 +38,13 @@
 - 🔗 **Lien Twitch** : https://www.twitch.tv/anyme023/clip/RelentlessWildCockroachThisIsSparta-5jXDni3DNyIDy-Ll
 - 🎮 **Jeu / Catégorie** : Only Up!
 - 🗣️ **Contexte audio** : *"Je glisse sur le tuyau... non non non raccroche-toi ! TOUT EN BAS ! Je suis revenu au tout début ! J'éteins le stream, bonne soirée."*
-- 🔴 **Titre YouTube Shorts généré** : **`Anyme | 4 heures de montée pour ça... je désinstalle`**
-- 📺 **Titre Overlay Vidéo (Haut)** : `POV: Anyme PÈTE SON CRÂNE SUR ONLY UP`
-- 🏷️ **Hashtags** : `#anyme023 #désinstalle #gaming #heures #montée #onlyup! #pour #shorts #twitchfr`
+- 🔴 **Titre YouTube Shorts généré** : **`Anyme | 4H DE MONTEE POUR REVENIR AU DÉBUT`**
+- 📺 **Titre Overlay Vidéo (Haut)** : `POV: Anyme REVIENT AU BOTTOM en LIVE`
+- 💡 **Variantes de titres proposées** :
+  - `Anyme | 4H DE MONTEE POUR REVENIR AU DÉBUT`
+  - `Anyme | J'AI PERDU 4 HEURES ET J'AI DÉSACTIVÉ`
+  - `Anyme | POV: JE GLISSE, REVIENS AU DÉBUT, ET J'ARRÊTE`
+- 🏷️ **Hashtags** : `#Anyme #TwitchFR #OnlyUp #Gaming #StreamFail`
 
 ---
 
@@ -40,9 +52,13 @@
 - 🔗 **Lien Twitch** : https://www.twitch.tv/anyme023/clip/FaithfulSuspiciousSalmonKAPOW-qyWvDyDaM7yFE00J
 - 🎮 **Jeu / Catégorie** : Just Chatting
 - 🗣️ **Contexte audio** : *"Le mec monte sur Discord, commence à réciter un poème d'amour de 3 pages et sort une bague en plastique devant 4000 personnes..."*
-- 🔴 **Titre YouTube Shorts généré** : **`Anyme | Il m'appelle sur Discord pour me faire une demande en mariage`**
-- 📺 **Titre Overlay Vidéo (Haut)** : `UN VIEWER LE DEMANDE EN MARIAGE`
-- 🏷️ **Hashtags** : `#anyme023 #appelle #discord #faire #gaming #pour #shorts #twitchfr`
+- 🔴 **Titre YouTube Shorts généré** : **`Anyme | IL ME DEMANDE EN MARIAGE EN LIVE, POÈME DE 3 PAGES & BAGUE EN PLASTIQUE`**
+- 📺 **Titre Overlay Vidéo (Haut)** : `POV: ANYME SE FAIT DEMANDER EN LIVE`
+- 💡 **Variantes de titres proposées** :
+  - `Anyme | IL ME DEMANDE EN MARIAGE EN LIVE, POÈME DE 3 PAGES & BAGUE EN PLASTIQUE`
+  - `Anyme | POÈME D'AMOUR DE 3 PAGES + BAGUE EN PLASTIQUE, CHOC EN LIVE`
+  - `Anyme | POV: 4000 VIEWERS, POÈME D'AMOUR & DEMANDE EN MARIAGE`
+- 🏷️ **Hashtags** : `#Anyme #TwitchFR #JustChatting #DemandeEnMariage #Stream`
 
 ---
 
