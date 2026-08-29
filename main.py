@@ -69,9 +69,15 @@ def _save_published_history(history_data):
         json.dump(history_data, f, indent=2, ensure_ascii=False)
 
 
-def _today_published_ids(history_data):
-    today_str = date.today().isoformat()
-    return [item["twitch_clip_id"] for item in history_data.get(today_str, [])]
+def _published_clip_ids(history_data):
+    """IDs de tous les clips déjà publiés, sur toute l'historique (pas seulement aujourd'hui)."""
+    ids = []
+    for day_items in history_data.values():
+        for item in day_items:
+            clip_id = item.get("twitch_clip_id")
+            if clip_id:
+                ids.append(clip_id)
+    return ids
 
 
 def _add_to_history(history_data, clip_id, youtube_id):
@@ -92,7 +98,7 @@ KEEP_FILES = False
 
 def main(clip_ids_input=None, no_upload=False, keep_files=False):
     history = _load_published_history()
-    already_published = _today_published_ids(history)
+    already_published = _published_clip_ids(history)
 
     # 1. Récupération des clips éligibles
     twitch_token = get_top_clips.get_twitch_access_token()

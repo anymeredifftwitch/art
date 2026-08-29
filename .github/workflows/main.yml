@@ -41,6 +41,8 @@ on:
 jobs:
   process-short:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -120,6 +122,18 @@ jobs:
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
           GOOGLE_APPLICATION_CREDENTIALS: client_secret.json
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+      - name: Persist published shorts history
+        run: |
+          if git status --porcelain -- data/published_shorts_history.json | grep -q .; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add data/published_shorts_history.json
+            git commit -m "chore: update published shorts history"
+            git push
+          else
+            echo "Aucun changement d'historique, commit ignoré."
+          fi
 
       - name: Upload processed videos & previews as artifacts
         uses: actions/upload-artifact@v4
