@@ -78,5 +78,17 @@
       "youtube_short_id": "H4B3nkXMDbA",
       "timestamp": "2026-09-01T17:17:05.287400"
     }
+  ],
+  "2026-09-02": [
+    {
+      "twitch_clip_id": "ResoluteSwissWaffleMau5-MftztrROcLCfIP8l",
+      "youtube_short_id": "CvWEjijK_fU",
+      "timestamp": "2026-09-02T17:01:04.882989"
+    },
+    {
+      "twitch_clip_id": "SoftNurturingTireCharlietheUnicorn-sRnmRUIZQyrYq2N4",
+      "youtube_short_id": "JlMKVw2fEZs",
+      "timestamp": "2026-09-02T17:04:57.313060"
+    }
   ]
 }
