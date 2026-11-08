@@ -829,5 +829,17 @@
       "youtube_short_id": "YWPRL8UjRl0",
       "timestamp": "2026-11-07T18:01:30.705279"
     }
+  ],
+  "2026-11-08": [
+    {
+      "twitch_clip_id": "AmericanSleepyOcelotHassanChop-nF-TSBfNZb7btXYQ",
+      "youtube_short_id": "9uvwop0mLaM",
+      "timestamp": "2026-11-08T18:17:26.026447"
+    },
+    {
+      "twitch_clip_id": "CloudyIncredulousDeerBIRB-8nsN7lf3j1VjQ8Y1",
+      "youtube_short_id": "TWi8YqLwvqg",
+      "timestamp": "2026-11-08T18:21:47.709318"
+    }
   ]
 }
